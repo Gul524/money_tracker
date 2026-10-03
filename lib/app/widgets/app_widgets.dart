@@ -44,16 +44,39 @@ class AppPanel extends StatelessWidget {
   final Widget child;
   final EdgeInsets padding;
   @override
-  Widget build(BuildContext context) => Material(
-    color: Theme.of(context).colorScheme.surface,
-    borderRadius: BorderRadius.circular(RadiusSize.extraLarge),
-    elevation: ComponentSize.panelElevation,
-    shadowColor: Theme.of(context).shadowColor.withValues(alpha: 0.06),
-    child: SizedBox(
-      width: double.infinity,
-      child: Padding(padding: padding, child: child),
-    ),
-  );
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final radius = BorderRadius.circular(RadiusSize.extraLarge);
+
+    return Stack(
+      children: [
+        Positioned.fill(
+          top: BorderSize.medium,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: colors.outline,
+              borderRadius: radius,
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(bottom: BorderSize.medium),
+          child: Material(
+            color: colors.surface,
+            surfaceTintColor: Colors.transparent,
+            shape: RoundedRectangleBorder(
+              borderRadius: radius,
+              side: BorderSide(color: colors.outlineVariant),
+            ),
+            child: SizedBox(
+              width: double.infinity,
+              child: Padding(padding: padding, child: child),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 class AppSectionTitle extends StatelessWidget {
