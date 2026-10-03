@@ -42,7 +42,7 @@
     "radiusDp": {
       "panel": 24,
       "input": 16,
-      "centerAction": 14
+      "centerAction": 18
     },
     "typography": {
       "pageTitle": { "weight": 800, "role": "headlineMedium" },
@@ -53,7 +53,7 @@
     }
   },
   "navigation": {
-    "type": "persistentBottomBar",
+    "type": "floatingRoundedBottomBar",
     "order": ["home", "history", "centerActions", "reports", "settings"],
     "destinations": [
       { "id": "home", "label": "Home", "icon": "grid_view_rounded", "screen": "home" },
@@ -62,7 +62,7 @@
       { "id": "settings", "label": "Settings", "icon": "settings_outlined", "screen": "settings" }
     ],
     "centerActions": {
-      "style": "single highlighted split rectangle with a full-height vertical divider",
+      "style": "elevated rounded split control with a full-height vertical divider and bottom clearance",
       "heightDp": 52,
       "halves": [
         { "id": "add", "icon": "add_rounded", "tooltip": "Add transaction", "opens": "transactionForm" },
@@ -93,12 +93,13 @@
     "home": {
       "title": "Overview",
       "subtitle": "Current date and This month",
-      "layout": "Vertical scrolling dashboard",
+      "layout": "Vertical dashboard with prominent balance, monthly flow, financial position, accounts and recent activity",
       "sections": [
-        { "id": "accountTotal", "type": "panel", "content": ["Total in accounts", "Monthly income", "Monthly expenses"] },
-        { "id": "summaryCards", "type": "twoColumnGrid", "content": ["Owed to you", "You owe", "Assets", "Tax paid"] },
-        { "id": "accounts", "type": "panelList", "content": ["Account name", "Account type", "Calculated balance"] },
-        { "id": "quickActions", "type": "panelList", "items": ["Owe", "Accounts", "Assets", "Manage categories"] }
+        { "id": "balance", "type": "hero", "content": ["Total in accounts", "Net this month"] },
+        { "id": "cashFlow", "type": "flowPanel", "content": ["Monthly income", "Monthly expenses", "Proportion bar"] },
+        { "id": "position", "type": "metricList", "content": ["Owed to you", "You owe", "Assets", "Tax paid this month"] },
+        { "id": "accounts", "type": "accountList", "content": ["Account name", "Account type", "Calculated balance"] },
+        { "id": "recentActivity", "type": "activityList", "content": ["Five latest transactions, transfers or tax payments", "See all"] }
       ]
     },
     "history": {
@@ -145,27 +146,27 @@
     },
     "owe": {
       "title": "Owe",
-      "entryPoint": "Home quick actions",
+      "entryPoint": "Home position section",
       "content": "Pending money to receive and repay, with amount and optional due date",
       "interaction": "Tap an item, choose an account, and mark it completed."
     },
     "accounts": {
       "title": "Accounts",
-      "entryPoint": "Home quick actions",
+      "entryPoint": "Home accounts section",
       "content": "Account list with name, type and calculated balance",
       "formFields": ["Name", "Account type", "Opening balance", "Archived when editing"],
       "actions": ["Add", "Edit", "Delete when allowed"]
     },
     "assets": {
       "title": "Assets",
-      "entryPoint": "Home quick actions",
+      "entryPoint": "Home position section",
       "content": "Asset list with current value",
       "formFields": ["Name", "Acquisition cost", "Current value", "Acquired on", "Notes"],
       "actions": ["Add", "Edit", "Delete when allowed"]
     },
     "categories": {
       "title": "Categories",
-      "entryPoint": "Home quick actions or transaction form",
+      "entryPoint": "Transaction form",
       "content": "Nested income, expense or both categories",
       "formFields": ["Name", "Type", "Parent category"],
       "actions": ["Add", "Edit", "Delete when allowed"]

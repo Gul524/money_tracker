@@ -17,7 +17,10 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     final services = AppServices.withDatabase(
-      LocalDatabase(factory: databaseFactoryFfi, path: inMemoryDatabasePath),
+      LocalDatabase(
+        factory: databaseFactoryFfiNoIsolate,
+        path: inMemoryDatabasePath,
+      ),
     );
     addTearDown(services.close);
 
@@ -28,6 +31,10 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('Overview'), findsOneWidget);
+    expect(find.text('TOTAL IN ACCOUNTS'), findsOneWidget);
+    expect(find.text('Quick actions'), findsNothing);
+    await tester.scrollUntilVisible(find.text('Recent activity'), 300);
+    expect(find.text('Recent activity'), findsOneWidget);
     for (final label in ['Home', 'History', 'Reports', 'Settings']) {
       expect(find.text(label), findsOneWidget);
     }
@@ -77,7 +84,10 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     final services = AppServices.withDatabase(
-      LocalDatabase(factory: databaseFactoryFfi, path: inMemoryDatabasePath),
+      LocalDatabase(
+        factory: databaseFactoryFfiNoIsolate,
+        path: inMemoryDatabasePath,
+      ),
     );
     addTearDown(services.close);
 

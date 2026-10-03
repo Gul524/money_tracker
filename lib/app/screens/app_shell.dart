@@ -36,7 +36,10 @@ class _AppShellState extends State<AppShell> {
   @override
   Widget build(BuildContext context) {
     final pages = <int, Widget>{
-      0: HomeScreen(services: widget.services),
+      0: HomeScreen(
+        services: widget.services,
+        onShowHistory: () => setState(() => selected = 1),
+      ),
       1: HistoryScreen(services: widget.services),
       4: ReportsScreen(services: widget.services),
       5: SettingsScreen(services: widget.services, embedded: true),
@@ -44,48 +47,49 @@ class _AppShellState extends State<AppShell> {
     final colors = Theme.of(context).colorScheme;
     return Scaffold(
       body: SafeArea(child: pages[selected]!),
-      bottomNavigationBar: SafeArea(
-        top: false,
-        child: Material(
-          color: colors.surface,
-          elevation: ComponentSize.navigationElevation,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: SpaceSize.extraSmall,
-              vertical: SpaceSize.small,
-            ),
-            child: Row(
-              children: [
-                _NavItem(
-                  index: 0,
-                  label: 'Home',
-                  icon: Icons.grid_view_rounded,
-                  selected: selected == 0,
-                  onTap: _select,
-                ),
-                _NavItem(
-                  index: 1,
-                  label: 'History',
-                  icon: Icons.history_rounded,
-                  selected: selected == 1,
-                  onTap: _select,
-                ),
-                _CenterActions(onTap: _select),
-                _NavItem(
-                  index: 4,
-                  label: 'Reports',
-                  icon: Icons.bar_chart_rounded,
-                  selected: selected == 4,
-                  onTap: _select,
-                ),
-                _NavItem(
-                  index: 5,
-                  label: 'Settings',
-                  icon: Icons.settings_outlined,
-                  selected: selected == 5,
-                  onTap: _select,
-                ),
-              ],
+      bottomNavigationBar: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        child: SafeArea(
+          top: false,
+          child: Material(
+            color: colors.surface,
+            elevation: ComponentSize.navigationElevation,
+            borderRadius: BorderRadius.circular(24),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(6, 14, 6, 9),
+              child: Row(
+                children: [
+                  _NavItem(
+                    index: 0,
+                    label: 'Home',
+                    icon: Icons.grid_view_rounded,
+                    selected: selected == 0,
+                    onTap: _select,
+                  ),
+                  _NavItem(
+                    index: 1,
+                    label: 'History',
+                    icon: Icons.history_rounded,
+                    selected: selected == 1,
+                    onTap: _select,
+                  ),
+                  _CenterActions(onTap: _select),
+                  _NavItem(
+                    index: 4,
+                    label: 'Reports',
+                    icon: Icons.bar_chart_rounded,
+                    selected: selected == 4,
+                    onTap: _select,
+                  ),
+                  _NavItem(
+                    index: 5,
+                    label: 'Settings',
+                    icon: Icons.settings_outlined,
+                    selected: selected == 5,
+                    onTap: _select,
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -160,45 +164,50 @@ class _CenterActions extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     return Expanded(
       flex: 2,
-      child: SizedBox(
-        height: ComponentSize.centerActionHeight,
-        child: Material(
-          color: colors.primary,
-          borderRadius: BorderRadius.circular(RadiusSize.small),
-          clipBehavior: Clip.antiAlias,
-          child: Row(
-            children: [
-              Expanded(
-                child: Tooltip(
-                  message: 'Add transaction',
-                  child: InkWell(
-                    onTap: () => onTap(2),
-                    child: Center(
-                      child: Icon(Icons.add_rounded, color: colors.onPrimary),
-                    ),
-                  ),
-                ),
-              ),
-              Container(
-                width: ComponentSize.centerActionDivider,
-                height: ComponentSize.centerActionHeight,
-                color: colors.onPrimary.withValues(alpha: .35),
-              ),
-              Expanded(
-                child: Tooltip(
-                  message: 'Transfer money',
-                  child: InkWell(
-                    onTap: () => onTap(3),
-                    child: Center(
-                      child: Icon(
-                        Icons.swap_horiz_rounded,
-                        color: colors.onPrimary,
+      child: Transform.translate(
+        offset: const Offset(0, -12),
+        child: SizedBox(
+          height: ComponentSize.centerActionHeight,
+          child: Material(
+            color: colors.primary,
+            elevation: 9,
+            shadowColor: colors.primary.withValues(alpha: .4),
+            borderRadius: BorderRadius.circular(18),
+            clipBehavior: Clip.antiAlias,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Tooltip(
+                    message: 'Add transaction',
+                    child: InkWell(
+                      onTap: () => onTap(2),
+                      child: Center(
+                        child: Icon(Icons.add_rounded, color: colors.onPrimary),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
+                Container(
+                  width: ComponentSize.centerActionDivider,
+                  height: ComponentSize.centerActionHeight,
+                  color: colors.onPrimary.withValues(alpha: .35),
+                ),
+                Expanded(
+                  child: Tooltip(
+                    message: 'Transfer money',
+                    child: InkWell(
+                      onTap: () => onTap(3),
+                      child: Center(
+                        child: Icon(
+                          Icons.swap_horiz_rounded,
+                          color: colors.onPrimary,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

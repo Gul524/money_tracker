@@ -8,7 +8,7 @@ A local first mobile app for recording income, expenses, money owed to you, mone
 
 ## Product and UI plan
 
-The interface uses an iOS inspired layout with clear totals, generous spacing, and familiar list rows. The bottom bar has Home, History, a single highlighted split action control, Reports, and Settings. The control's left **+** button opens a new transaction; its right **↔** button opens a transfer. Owe, Accounts, Assets, and Categories are reached from Home. Tax payments are entered from the transaction screen as a distinct record type.
+The dashboard leads with total account balance and monthly net, followed by income and expenses, outstanding amounts, assets, tax, account balances, and the five most recent transactions, tax payments, or transfers. Owe, Accounts, and Assets open from their overview sections; Categories are available from the transaction form. The floating, rounded bottom bar has Home, History, an elevated split action control, Reports, and Settings. The control's left **+** button opens a new transaction; its right **↔** button opens a transfer. Tax payments are entered from the transaction screen as a distinct record type.
 
 ```text
 Home   History   ┌─────┬─────┐   Reports   Settings
@@ -18,7 +18,7 @@ Home   History   ┌─────┬─────┐   Reports   Settings
 
 | Screen | Purpose |
 | --- | --- |
-| Dashboard | Today’s date; current month income, expense, and tax paid; all pending owe in/out; account balances; total current asset value. |
+| Dashboard | Total balance and monthly net; income, expense, and tax paid; pending owe in/out; account balances; asset value; five recent activity entries with a link to History. |
 | Add / manage transaction | Record income, expense, owe in, or owe out. Require category; allow optional nested subcategory, note, and party. Select an account for immediate money movement. |
 | Categories | Create, rename, and delete income, expense, or both categories at any depth. A parent and any nested category can be selected for a transaction. |
 | Accounts | CRUD for cash, bank, and microfinance accounts; show calculated balance and allow archiving. |

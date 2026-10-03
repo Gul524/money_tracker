@@ -13,6 +13,7 @@ import 'package:money_tracker/data/repo/tax_repository.dart';
 import 'package:money_tracker/data/repo/transaction_repository.dart';
 import 'package:money_tracker/data/repo/transfer_repository.dart';
 import 'package:money_tracker/data/services/dashboard_service.dart';
+import 'package:money_tracker/data/services/activity_service.dart';
 import 'package:money_tracker/data/services/local_database.dart';
 import 'package:money_tracker/data/services/settings_service.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -139,4 +140,55 @@ void main() {
     await settings.setThemeMode('system');
     expect(await settings.themeMode(), 'system');
   });
+
+  test(
+    'recent activity merges transfers, tax and transactions by date',
+    () async {
+      final storage = LocalDatabase(
+        factory: databaseFactoryFfi,
+        path: inMemoryDatabasePath,
+      );
+      addTearDown(storage.close);
+      final accounts = AccountRepository(storage);
+      final first = await accounts.create(
+        const Account(name: 'Cash', type: AccountType.cash),
+      );
+      final second = await accounts.create(
+        const Account(name: 'Bank', type: AccountType.bank),
+      );
+      final category = await CategoryRepository(storage)
+          .create(const Category(name: 'Salary', type: CategoryType.income));
+      await TransactionRepository(storage).create(
+        MoneyTransaction(
+          type: TransactionType.income,
+          amountMinor: 1000,
+          categoryId: category.id!,
+          accountId: first.id,
+          occurredAt: DateTime(2026, 10, 1),
+        ),
+      );
+      await TaxRepository(storage).create(
+        TaxPayment(
+          amountMinor: 100,
+          paidAt: DateTime(2026, 10, 2),
+          accountId: first.id!,
+        ),
+      );
+      await TransferRepository(storage).create(
+        AccountTransfer(
+          fromAccountId: first.id!,
+          toAccountId: second.id!,
+          amountMinor: 300,
+          occurredAt: DateTime(2026, 10, 3),
+        ),
+      );
+
+      final recent = await ActivityService(storage).history(limit: 2);
+      expect(recent.map((item) => item.kind), [
+        ActivityKind.transfer,
+        ActivityKind.tax,
+      ]);
+      expect(recent.first.subtitle, 'Cash → Bank');
+    },
+  );
 }

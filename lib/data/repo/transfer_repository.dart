@@ -34,9 +34,13 @@ class TransferRepository extends CrudRepository<AccountTransfer> {
     }
   }
 
-  Future<List<AccountTransfer>> history() async {
+  Future<List<AccountTransfer>> history({int? limit}) async {
     final db = await storage.database;
-    final rows = await db.query(table, orderBy: 'occurred_at DESC, id DESC');
+    final rows = await db.query(
+      table,
+      orderBy: 'occurred_at DESC, id DESC',
+      limit: limit,
+    );
     return rows.map(fromRow).toList();
   }
 }

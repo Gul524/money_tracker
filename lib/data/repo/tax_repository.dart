@@ -47,4 +47,14 @@ class TaxRepository extends CrudRepository<TaxPayment> {
     );
     return rows.map(fromRow).toList();
   }
+
+  Future<List<TaxPayment>> history({int? limit}) async {
+    final db = await storage.database;
+    final rows = await db.query(
+      table,
+      orderBy: 'paid_at DESC, id DESC',
+      limit: limit,
+    );
+    return rows.map(fromRow).toList();
+  }
 }

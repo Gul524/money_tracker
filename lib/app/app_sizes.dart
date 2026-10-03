@@ -61,7 +61,7 @@ abstract final class SpaceSize {
 
 abstract final class ComponentSize {
   static const double navigationIconBox = 30;
-  static const double centerActionHeight = 42;
+  static const double centerActionHeight = 52;
   static const double centerActionDivider = 1;
   static const double splashLogoRadius = 36;
   static const double panelElevation = 2;
