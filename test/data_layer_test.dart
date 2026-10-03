@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:money_tracker/data/models/account.dart';
 import 'package:money_tracker/data/models/account_transfer.dart';
@@ -20,6 +22,106 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
   sqfliteFfiInit();
+
+  test(
+    'new databases include editable categories and a Cash account',
+    () async {
+      final storage = LocalDatabase(
+        factory: databaseFactoryFfi,
+        path: inMemoryDatabasePath,
+      );
+      addTearDown(storage.close);
+
+      final categories = await CategoryRepository(storage).getAll();
+      expect(
+        categories
+            .where((c) => c.type == CategoryType.income)
+            .map((c) => c.name),
+        containsAll(['Salary', 'Business', 'Bonus']),
+      );
+      expect(
+        categories
+            .where((c) => c.type == CategoryType.expense)
+            .map((c) => c.name),
+        containsAll([
+          'Food',
+          'Shopping',
+          'Phone',
+          'Donation',
+          'Gifts',
+          'Education',
+        ]),
+      );
+      final accounts = await AccountRepository(storage).getAll();
+      expect(accounts, hasLength(1));
+      expect(accounts.single.name, 'Cash');
+      expect(accounts.single.type, AccountType.cash);
+      expect(accounts.single.openingBalanceMinor, 0);
+    },
+  );
+
+  test('version 2 upgrade adds only missing defaults', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'money_tracker_test_',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final path = '${directory.path}/legacy.db';
+    final legacy = await databaseFactoryFfi.openDatabase(
+      path,
+      options: OpenDatabaseOptions(
+        version: 2,
+        onCreate: (db, _) async {
+          await db.execute('''
+            CREATE TABLE categories (
+              id INTEGER PRIMARY KEY, name TEXT NOT NULL,
+              type TEXT NOT NULL, parent_id INTEGER
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE accounts (
+              id INTEGER PRIMARY KEY, name TEXT NOT NULL,
+              type TEXT NOT NULL, opening_balance_minor INTEGER NOT NULL,
+              is_archived INTEGER NOT NULL
+            )
+          ''');
+          await db.insert('categories', {'name': 'Salary', 'type': 'income'});
+          await db.insert('categories', {'name': 'Custom', 'type': 'expense'});
+          await db.insert('accounts', {
+            'name': 'Cash',
+            'type': 'cash',
+            'opening_balance_minor': 500,
+            'is_archived': 0,
+          });
+        },
+      ),
+    );
+    await legacy.close();
+
+    final storage = LocalDatabase(factory: databaseFactoryFfi, path: path);
+    final categories = CategoryRepository(storage);
+    final accounts = AccountRepository(storage);
+    expect(
+      (await categories.getAll()).where((c) => c.name == 'Salary'),
+      hasLength(1),
+    );
+    expect(
+      (await categories.getAll()).where((c) => c.name == 'Custom'),
+      hasLength(1),
+    );
+    expect(await categories.getAll(), hasLength(10));
+    expect(await accounts.getAll(), hasLength(1));
+    expect((await accounts.getAll()).single.openingBalanceMinor, 500);
+    final gifts = (await categories.getAll()).singleWhere(
+      (category) => category.name == 'Gifts',
+    );
+    await categories.delete(gifts.id!);
+    await storage.close();
+
+    final reopened = LocalDatabase(factory: databaseFactoryFfi, path: path);
+    addTearDown(reopened.close);
+    expect(await CategoryRepository(reopened).getAll(), hasLength(9));
+    expect(await AccountRepository(reopened).getAll(), hasLength(1));
+  });
 
   test('linked records, balances, owing, tax and dashboard totals', () async {
     final storage = LocalDatabase(

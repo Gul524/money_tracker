@@ -33,6 +33,7 @@ Home   History   ┌─────┬─────┐   Reports   Settings
 
 - Amounts use integer **minor currency units** (for example, cents or paisa). The UI chooses a currency and formats amounts; no currency conversion exists yet.
 - A transaction has exactly one category ID. Its category must permit the transaction direction: income/owe in use income or both; expense/owe out use expense or both. The selected category may be at any depth.
+- The app starts with income categories Salary, Business, and Bonus; expense categories Food, Shopping, Phone, Donation, Gifts, and Education; and a Cash account with a zero opening balance. Existing databases receive any missing defaults once when upgraded. These are ordinary records and can be edited or deleted.
 - Income and expense require an account and immediately affect its balance. Pending owes have no balance effect. Completing an owe requires an account and completion date; owe in increases that balance and owe out decreases it.
 - Tax is stored as a separate paid tax record, requires an account, and reduces that account balance. It is not counted again as an expense transaction. Dashboard tax totals use the payment date.
 - Assets have an acquisition cost and a current value. An asset may link to one expense transaction for its purchase. Asset records alone do not change cash balances, avoiding a duplicate debit.
@@ -53,7 +54,7 @@ lib/app/widgets/       Shared cards, rows, fields and date controls
 
 `LocalDatabase` owns the database connection and schema. Category, Account, Transaction, Asset, Tax, and Transfer repositories expose `create`, `getById`, `getAll`, `update`, and `delete`, plus focused queries. Shared behavior lives in `CrudRepository`. Screen controllers call repositories and services; screens pass user input to controllers and render their state. Shared interaction widgets accept `isViewOnly` to render values without editing.
 
-The SQLite schema is version 2. IDs link categories to their parent, transactions to categories/accounts, assets to optional purchase transactions, tax payments to accounts, and transfers to both accounts. Existing version 1 databases are upgraded in place. Foreign keys are enabled on every connection.
+The SQLite schema is version 3. IDs link categories to their parent, transactions to categories/accounts, assets to optional purchase transactions, tax payments to accounts, and transfers to both accounts. Existing version 1 and 2 databases are upgraded in place. Foreign keys are enabled on every connection.
 
 ## Development
 

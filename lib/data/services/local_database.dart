@@ -17,7 +17,7 @@ class LocalDatabase {
     _database = await _factory.openDatabase(
       databasePath,
       options: OpenDatabaseOptions(
-        version: 2,
+        version: 3,
         onConfigure: (db) async => db.execute('PRAGMA foreign_keys = ON'),
         onCreate: _createSchema,
         onUpgrade: _upgradeSchema,
@@ -48,7 +48,7 @@ class LocalDatabase {
       CREATE TABLE accounts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
-        type TEXT NOT NULL CHECK(type IN ('cash', 'bank',)),
+        type TEXT NOT NULL CHECK(type IN ('cash', 'bank')),
         opening_balance_minor INTEGER NOT NULL DEFAULT 0,
         is_archived INTEGER NOT NULL DEFAULT 0 CHECK(is_archived IN (0, 1)),
         CHECK(length(trim(name)) > 0)
@@ -112,6 +112,7 @@ class LocalDatabase {
     );
     await _createTransfers(db);
     await _createSettings(db);
+    await _seedDefaults(db);
   }
 
   Future<void> _upgradeSchema(
@@ -123,6 +124,41 @@ class LocalDatabase {
       await _createTransfers(db);
       await _createSettings(db);
     }
+    if (oldVersion < 3) await _seedDefaults(db);
+  }
+
+  Future<void> _seedDefaults(Database db) async {
+    const categories = {
+      'income': ['Salary', 'Business', 'Bonus'],
+      'expense': [
+        'Food',
+        'Shopping',
+        'Phone',
+        'Donation',
+        'Gifts',
+        'Education',
+      ],
+    };
+    for (final entry in categories.entries) {
+      for (final name in entry.value) {
+        await db.rawInsert(
+          '''
+          INSERT INTO categories (name, type)
+          SELECT ?, ? WHERE NOT EXISTS (
+            SELECT 1 FROM categories
+            WHERE name = ? COLLATE NOCASE AND type = ? AND parent_id IS NULL
+          )
+        ''',
+          [name, entry.key, name, entry.key],
+        );
+      }
+    }
+    await db.rawInsert('''
+      INSERT INTO accounts (name, type, opening_balance_minor)
+      SELECT 'Cash', 'cash', 0 WHERE NOT EXISTS (
+        SELECT 1 FROM accounts WHERE name = 'Cash' COLLATE NOCASE AND type = 'cash'
+      )
+    ''');
   }
 
   Future<void> _createTransfers(Database db) async {
