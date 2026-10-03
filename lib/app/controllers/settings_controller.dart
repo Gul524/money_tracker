@@ -7,7 +7,7 @@ class SettingsController extends BaseController {
     refresh();
   }
   String currency = 'PKR';
-  ThemeMode themeMode = ThemeMode.light;
+  ThemeMode themeMode = ThemeMode.system;
 
   @override
   void refresh() {

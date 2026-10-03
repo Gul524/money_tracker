@@ -36,7 +36,7 @@ class AppServices extends ChangeNotifier {
   final DashboardService dashboard;
   final SettingsService settings;
   String currencyCode = 'PKR';
-  ThemeMode themeMode = ThemeMode.light;
+  ThemeMode themeMode = ThemeMode.system;
 
   Future<void> initialize() async {
     await database.database;

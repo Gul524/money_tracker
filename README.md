@@ -64,4 +64,4 @@ flutter analyze
 flutter test
 ```
 
-The generated `*.g.dart` files implement `fromJson` and `toJson`. When a model changes, rerun the generator. SQLite uses `sqflite`; desktop support is not configured. Display currency defaults to PKR and can be changed in Settings. Changing it changes the label only; saved amounts are not converted. Appearance defaults to light and can be set to light, dark, or the device setting in Settings. The choice is saved locally.
+The generated `*.g.dart` files implement `fromJson` and `toJson`. When a model changes, rerun the generator. SQLite uses `sqflite`; desktop support is not configured. Display currency defaults to PKR and can be changed in Settings. Changing it changes the label only; saved amounts are not converted. Appearance defaults to System, which follows the device's light or dark setting. Choose Light, Dark, or System in Settings; the choice is saved locally.

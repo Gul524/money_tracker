@@ -66,7 +66,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   label: 'Appearance',
                   value: controller.themeMode,
                   items: const {
-                    ThemeMode.system: 'Use device setting',
+                    ThemeMode.system: 'System',
                     ThemeMode.light: 'Light',
                     ThemeMode.dark: 'Dark',
                   },

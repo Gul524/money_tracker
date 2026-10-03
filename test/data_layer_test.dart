@@ -133,7 +133,7 @@ void main() {
     final settings = SettingsService(storage);
     await settings.setCurrency('USD');
     expect(await settings.currency(), 'USD');
-    expect(await settings.themeMode(), 'light');
+    expect(await settings.themeMode(), 'system');
     await settings.setThemeMode('dark');
     expect(await settings.themeMode(), 'dark');
     await settings.setThemeMode('system');

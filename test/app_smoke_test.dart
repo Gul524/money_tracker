@@ -70,6 +70,8 @@ void main() {
   testWidgets('changes appearance and restores the saved choice', (
     tester,
   ) async {
+    tester.platformDispatcher.platformBrightnessTestValue = Brightness.dark;
+    addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -95,6 +97,25 @@ void main() {
       () => Future<void>.delayed(const Duration(milliseconds: 100)),
     );
     await tester.pump();
+    expect(services.themeMode, ThemeMode.system);
+    expect(
+      Theme.of(tester.element(find.byType(SettingsScreen))).brightness,
+      Brightness.dark,
+    );
+
+    await tester.tap(find.text('System').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Light').last);
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await tester.pumpAndSettle();
+    expect(services.themeMode, ThemeMode.light);
+    expect(
+      Theme.of(tester.element(find.byType(SettingsScreen))).brightness,
+      Brightness.light,
+    );
+
     await tester.tap(find.text('Light').last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Dark').last);
@@ -114,8 +135,24 @@ void main() {
       Brightness.dark,
     );
     expect(await tester.runAsync(services.settings.themeMode), 'dark');
-    services.themeMode = ThemeMode.light;
+
+    await tester.tap(find.text('Dark').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('System').last);
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await tester.pumpAndSettle();
+    expect(services.themeMode, ThemeMode.system);
+    tester.platformDispatcher.platformBrightnessTestValue = Brightness.light;
+    await tester.pumpAndSettle();
+    expect(
+      Theme.of(tester.element(find.byType(SettingsScreen))).brightness,
+      Brightness.light,
+    );
+
+    services.themeMode = ThemeMode.dark;
     await tester.runAsync(services.initialize);
-    expect(services.themeMode, ThemeMode.dark);
+    expect(services.themeMode, ThemeMode.system);
   });
 }

@@ -41,7 +41,9 @@ class SettingsService {
       limit: 1,
     );
     final value = rows.isEmpty ? null : rows.first['value'] as String;
-    return const ['light', 'dark', 'system'].contains(value) ? value! : 'light';
+    return const ['light', 'dark', 'system'].contains(value)
+        ? value!
+        : 'system';
   }
 
   Future<void> setThemeMode(String mode) async {
