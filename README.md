@@ -21,7 +21,7 @@ Home   History   ┌─────┬─────┐   Reports   Settings
 | Dashboard | Total balance and monthly net; income, expense, and tax paid; pending owe in/out; account balances; asset value; five recent activity entries with a link to History. |
 | Add / manage transaction | Record income, expense, owe in, or owe out. Require category; allow optional nested subcategory, note, and party. Select an account for immediate money movement. |
 | Categories | Create, rename, and delete income, expense, or both categories at any depth. A parent and any nested category can be selected for a transaction. |
-| Accounts | CRUD for cash, bank, and microfinance accounts; show calculated balance and allow archiving. |
+| Accounts | CRUD for cash and bank accounts; show calculated balance and allow archiving. |
 | Assets | CRUD for held items, acquisition cost, estimated current value, and optional linked purchase expense. |
 | History | Show transactions, tax payments, and transfers in date order; open transactions for editing or deletion. Search and filters are future work. |
 | Reports | Show current month income, expenses, tax paid, and net, plus current balances, pending owes, and asset value. |

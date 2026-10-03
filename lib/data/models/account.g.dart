@@ -25,5 +25,4 @@ Map<String, dynamic> _$AccountToJson(Account instance) => <String, dynamic>{
 const _$AccountTypeEnumMap = {
   AccountType.cash: 'cash',
   AccountType.bank: 'bank',
-  AccountType.microfinance: 'microfinance',
 };

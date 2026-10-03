@@ -1,6 +1,6 @@
 enum CategoryType { income, expense, both }
 
-enum AccountType { cash, bank, microfinance }
+enum AccountType { cash, bank }
 
 enum TransactionType { income, expense, oweIn, oweOut }
 

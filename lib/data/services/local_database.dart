@@ -48,7 +48,7 @@ class LocalDatabase {
       CREATE TABLE accounts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
-        type TEXT NOT NULL CHECK(type IN ('cash', 'bank', 'microfinance')),
+        type TEXT NOT NULL CHECK(type IN ('cash', 'bank',)),
         opening_balance_minor INTEGER NOT NULL DEFAULT 0,
         is_archived INTEGER NOT NULL DEFAULT 0 CHECK(is_archived IN (0, 1)),
         CHECK(length(trim(name)) > 0)

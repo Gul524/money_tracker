@@ -76,7 +76,6 @@ class _AccountScreenState extends State<AccountScreen> {
                     items: const {
                       AccountType.cash: 'Cash',
                       AccountType.bank: 'Bank',
-                      AccountType.microfinance: 'Microfinance',
                     },
                     onChanged: (v) {
                       if (v != null) setSheetState(() => type = v);
