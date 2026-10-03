@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../data/models/model_types.dart';
 import '../app_services.dart';
+import '../app_sizes.dart';
 import '../controllers/owe_controller.dart';
 import '../widgets/app_widgets.dart';
 
@@ -32,7 +33,7 @@ class _OweScreenState extends State<OweScreen> {
       context: context,
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       builder: (sheetContext) => Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(SpaceSize.extraLarge),
         child: StatefulBuilder(
           builder: (context, setSheetState) => Column(
             mainAxisSize: MainAxisSize.min,
@@ -42,14 +43,14 @@ class _OweScreenState extends State<OweScreen> {
                 'Mark as completed',
                 style: Theme.of(context).textTheme.titleLarge,
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: SpaceSize.small),
               Text(
                 'Choose the account that received or paid the money.',
                 style: TextStyle(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: SpaceSize.header),
               AppSelect<int>(
                 label: 'Account',
                 value: accountId,
@@ -61,7 +62,7 @@ class _OweScreenState extends State<OweScreen> {
                 },
                 onChanged: (v) => setSheetState(() => accountId = v),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: SpaceSize.large),
               FilledButton(
                 onPressed: accountId == null
                     ? null
@@ -84,11 +85,11 @@ class _OweScreenState extends State<OweScreen> {
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: controller,
     builder: (context, _) => ListView(
-      padding: const EdgeInsets.only(bottom: 100),
+      padding: const EdgeInsets.only(bottom: SpaceSize.listBottom),
       children: [
         const PageHeader(title: 'Owe', subtitle: 'Money to receive and repay'),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
+          padding: const EdgeInsets.symmetric(horizontal: SpaceSize.extraLarge),
           child: controller.items.isEmpty
               ? const AppEmpty('No pending owes')
               : AppPanel(
@@ -124,7 +125,7 @@ class _OweScreenState extends State<OweScreen> {
                                 'Complete',
                                 style: TextStyle(
                                   color: Theme.of(context).colorScheme.primary,
-                                  fontSize: 12,
+                                  fontSize: TextSize.small,
                                 ),
                               ),
                             ],
@@ -136,7 +137,7 @@ class _OweScreenState extends State<OweScreen> {
                 ),
         ),
         Padding(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(SpaceSize.extraLarge),
           child: AppError(controller.error),
         ),
       ],

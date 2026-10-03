@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../app_services.dart';
+import '../app_sizes.dart';
 import '../controllers/transfer_controller.dart';
 import '../widgets/app_widgets.dart';
 
@@ -31,7 +32,7 @@ class _TransferScreenState extends State<TransferScreen> {
     builder: (context, _) => Scaffold(
       appBar: AppBar(title: const Text('Transfer money')),
       body: ListView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(SpaceSize.extraLarge),
         children: [
           Text(
             'Move money between your accounts without changing income or expenses.',
@@ -39,7 +40,7 @@ class _TransferScreenState extends State<TransferScreen> {
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: SpaceSize.header),
           AppPanel(
             child: Column(
               children: [
@@ -49,14 +50,14 @@ class _TransferScreenState extends State<TransferScreen> {
                   items: {for (final a in controller.accounts) a.id!: a.name},
                   onChanged: controller.setFrom,
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: SpaceSize.form),
                 AppSelect<int>(
                   label: 'To account',
                   value: controller.toAccountId,
                   items: {for (final a in controller.accounts) a.id!: a.name},
                   onChanged: controller.setTo,
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: SpaceSize.form),
                 AppInput(
                   label: 'Amount (${widget.services.currencyCode})',
                   value: controller.amountText,
@@ -80,7 +81,7 @@ class _TransferScreenState extends State<TransferScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: SpaceSize.large),
           AppError(controller.error),
           FilledButton(
             onPressed: controller.busy
@@ -91,7 +92,7 @@ class _TransferScreenState extends State<TransferScreen> {
                     }
                   },
             child: const Padding(
-              padding: EdgeInsets.all(14),
+              padding: EdgeInsets.all(SpaceSize.form),
               child: Text('Transfer'),
             ),
           ),

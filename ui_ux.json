@@ -1,0 +1,180 @@
+{
+  "schemaVersion": 1,
+  "app": {
+    "name": "Money Tracker",
+    "platform": "Flutter mobile",
+    "style": "Clean, iOS-inspired personal finance interface",
+    "designGoals": [
+      "Show key money totals at a glance",
+      "Make adding a transaction or transfer quick",
+      "Keep forms and lists readable in light and dark modes"
+    ]
+  },
+  "designTokens": {
+    "colors": {
+      "light": {
+        "background": "#F5F7FB",
+        "surface": "#FFFFFF",
+        "textPrimary": "#17243B",
+        "textSecondary": "#718096",
+        "accent": "#375CF5"
+      },
+      "dark": {
+        "background": "#101827",
+        "surface": "#1C2940",
+        "textPrimary": "#F2F5FC",
+        "textSecondary": "#B4C1D4",
+        "accent": "#91A9FF"
+      },
+      "semantic": {
+        "error": "Use theme error color",
+        "positive": "Use theme tertiary color"
+      }
+    },
+    "spacingDp": {
+      "small": 8,
+      "medium": 12,
+      "large": 16,
+      "screenHorizontal": 20,
+      "panelPadding": 20,
+      "sectionGap": 24
+    },
+    "radiusDp": {
+      "panel": 24,
+      "input": 16,
+      "centerAction": 14
+    },
+    "typography": {
+      "pageTitle": { "weight": 800, "role": "headlineMedium" },
+      "sectionTitle": { "weight": 700, "role": "titleLarge" },
+      "body": { "role": "bodyMedium" },
+      "supporting": { "role": "bodySmall", "color": "textSecondary" },
+      "bottomNavigationLabel": { "sizeSp": 10, "selectedWeight": 700 }
+    }
+  },
+  "navigation": {
+    "type": "persistentBottomBar",
+    "order": ["home", "history", "centerActions", "reports", "settings"],
+    "destinations": [
+      { "id": "home", "label": "Home", "icon": "grid_view_rounded", "screen": "home" },
+      { "id": "history", "label": "History", "icon": "history_rounded", "screen": "history" },
+      { "id": "reports", "label": "Reports", "icon": "bar_chart_rounded", "screen": "reports" },
+      { "id": "settings", "label": "Settings", "icon": "settings_outlined", "screen": "settings" }
+    ],
+    "centerActions": {
+      "style": "single highlighted split rectangle with a full-height vertical divider",
+      "heightDp": 52,
+      "halves": [
+        { "id": "add", "icon": "add_rounded", "tooltip": "Add transaction", "opens": "transactionForm" },
+        { "id": "transfer", "icon": "swap_horiz_rounded", "tooltip": "Transfer money", "opens": "transferForm" }
+      ],
+      "behavior": "Each half is independently tappable and opens a form above the current tab."
+    },
+    "defaultTab": "home"
+  },
+  "sharedComponents": {
+    "panel": "Rounded surface card with 20 dp padding and subtle elevation",
+    "pageHeader": "Large title, optional supporting subtitle and optional actions",
+    "listItem": "Leading circular icon, title, one-line subtitle and optional trailing value or action",
+    "input": "Filled outlined field; view-only mode shows a label and value",
+    "select": "Filled dropdown; view-only mode shows a label and value",
+    "dateField": "Tappable row that opens a date picker",
+    "emptyState": "Centered icon and short message",
+    "error": "Inline error text using the theme error color"
+  },
+  "screens": {
+    "splash": {
+      "title": "Money Tracker",
+      "subtitle": "Know where your money stands",
+      "layout": "Centered logo, title, subtitle and loading indicator",
+      "onSuccess": "home",
+      "onError": "Show message and Try again button"
+    },
+    "home": {
+      "title": "Overview",
+      "subtitle": "Current date and This month",
+      "layout": "Vertical scrolling dashboard",
+      "sections": [
+        { "id": "accountTotal", "type": "panel", "content": ["Total in accounts", "Monthly income", "Monthly expenses"] },
+        { "id": "summaryCards", "type": "twoColumnGrid", "content": ["Owed to you", "You owe", "Assets", "Tax paid"] },
+        { "id": "accounts", "type": "panelList", "content": ["Account name", "Account type", "Calculated balance"] },
+        { "id": "quickActions", "type": "panelList", "items": ["Owe", "Accounts", "Assets", "Manage categories"] }
+      ]
+    },
+    "history": {
+      "title": "History",
+      "subtitle": "Every money movement in one place",
+      "layout": "Date-ordered activity list",
+      "itemTypes": ["Transaction", "Tax payment", "Transfer"],
+      "itemContent": ["Type icon", "Title", "Details and date", "Amount"],
+      "interaction": "Tap a transaction to edit or delete it; tax payments and transfers are read-only in this list.",
+      "emptyState": "No activity yet"
+    },
+    "reports": {
+      "title": "Reports",
+      "subtitle": "A snapshot of your money",
+      "layout": "Vertical list of two panels",
+      "sections": [
+        { "title": "This month", "fields": ["Income", "Expenses", "Tax paid", "Net after expenses and tax"] },
+        { "title": "Current position", "fields": ["Account balances", "Owed to you", "You owe", "Asset value"] }
+      ]
+    },
+    "settings": {
+      "title": "Settings",
+      "sections": [
+        { "title": "General", "fields": [
+          { "label": "Display currency", "type": "select", "options": ["PKR", "USD", "EUR", "GBP"], "default": "PKR" },
+          { "label": "Appearance", "type": "select", "options": ["Use device setting", "Light", "Dark"], "default": "Light" }
+        ] },
+        { "title": "Storage", "value": "Saved locally on this device" }
+      ],
+      "notes": ["Changing display currency does not convert stored amounts.", "Appearance is saved locally."]
+    },
+    "transactionForm": {
+      "title": "New transaction",
+      "presentation": "Full screen pushed from the Add half of the center control",
+      "fields": ["Type", "Amount", "Category", "Account", "Date", "Person or business when owing", "Due date when owing", "Note"],
+      "typeOptions": ["Expense", "Income", "Owed to me", "I owe", "Tax paid"],
+      "actions": ["Manage categories", "Save transaction", "Delete when editing"]
+    },
+    "transferForm": {
+      "title": "Transfer money",
+      "presentation": "Full screen pushed from the Transfer half of the center control",
+      "fields": ["From account", "To account", "Amount", "Date", "Note"],
+      "primaryAction": "Transfer"
+    },
+    "owe": {
+      "title": "Owe",
+      "entryPoint": "Home quick actions",
+      "content": "Pending money to receive and repay, with amount and optional due date",
+      "interaction": "Tap an item, choose an account, and mark it completed."
+    },
+    "accounts": {
+      "title": "Accounts",
+      "entryPoint": "Home quick actions",
+      "content": "Account list with name, type and calculated balance",
+      "formFields": ["Name", "Account type", "Opening balance", "Archived when editing"],
+      "actions": ["Add", "Edit", "Delete when allowed"]
+    },
+    "assets": {
+      "title": "Assets",
+      "entryPoint": "Home quick actions",
+      "content": "Asset list with current value",
+      "formFields": ["Name", "Acquisition cost", "Current value", "Acquired on", "Notes"],
+      "actions": ["Add", "Edit", "Delete when allowed"]
+    },
+    "categories": {
+      "title": "Categories",
+      "entryPoint": "Home quick actions or transaction form",
+      "content": "Nested income, expense or both categories",
+      "formFields": ["Name", "Type", "Parent category"],
+      "actions": ["Add", "Edit", "Delete when allowed"]
+    }
+  },
+  "interactionRules": [
+    "Show local currency code next to formatted amounts.",
+    "Show a confirmation dialog before irreversible deletion.",
+    "Show inline validation and database errors near the relevant form.",
+    "Use the same layout and readable contrast in light and dark themes."
+  ]
+}

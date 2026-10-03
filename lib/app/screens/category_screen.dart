@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../data/models/category.dart';
 import '../../data/models/model_types.dart';
 import '../app_services.dart';
+import '../app_sizes.dart';
 import '../controllers/category_controller.dart';
 import '../widgets/app_widgets.dart';
 
@@ -42,10 +43,10 @@ class _CategoryScreenState extends State<CategoryScreen> {
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       builder: (sheetContext) => Padding(
         padding: EdgeInsets.fromLTRB(
-          20,
-          20,
-          20,
-          MediaQuery.viewInsetsOf(sheetContext).bottom + 24,
+          SpaceSize.extraLarge,
+          SpaceSize.extraLarge,
+          SpaceSize.extraLarge,
+          MediaQuery.viewInsetsOf(sheetContext).bottom + SpaceSize.section,
         ),
         child: StatefulBuilder(
           builder: (context, setSheetState) => AnimatedBuilder(
@@ -59,13 +60,13 @@ class _CategoryScreenState extends State<CategoryScreen> {
                     existing == null ? 'New category' : 'Edit category',
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: SpaceSize.header),
                   AppInput(
                     label: 'Name',
                     value: name,
                     onChanged: (v) => name = v,
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: SpaceSize.medium),
                   AppSelect<CategoryType>(
                     label: 'Used for',
                     value: type,
@@ -78,7 +79,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
                       if (v != null) setSheetState(() => type = v);
                     },
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: SpaceSize.medium),
                   AppSelect<int>(
                     label: 'Parent (optional)',
                     value: parentId,
@@ -89,7 +90,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
                     },
                     onChanged: (v) => setSheetState(() => parentId = v),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: SpaceSize.compact),
                   AppError(controller.error),
                   FilledButton(
                     onPressed: controller.busy
@@ -129,7 +130,12 @@ class _CategoryScreenState extends State<CategoryScreen> {
               label: const Text('Category'),
             ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
+        padding: const EdgeInsets.fromLTRB(
+          SpaceSize.extraLarge,
+          SpaceSize.medium,
+          SpaceSize.extraLarge,
+          SpaceSize.listBottom,
+        ),
         children: [
           Text(
             'Organize transactions with categories at any depth.',
@@ -137,7 +143,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: SpaceSize.header),
           if (controller.items.isEmpty)
             const AppEmpty('No categories yet')
           else
@@ -162,7 +168,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
                 ],
               ),
             ),
-          const SizedBox(height: 12),
+          const SizedBox(height: SpaceSize.medium),
           AppError(controller.error),
         ],
       ),

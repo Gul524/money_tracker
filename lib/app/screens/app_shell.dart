@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../app_services.dart';
+import '../app_sizes.dart';
 import 'history_screen.dart';
 import 'home_screen.dart';
 import 'reports_screen.dart';
@@ -47,9 +48,12 @@ class _AppShellState extends State<AppShell> {
         top: false,
         child: Material(
           color: colors.surface,
-          elevation: 8,
+          elevation: ComponentSize.navigationElevation,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+            padding: const EdgeInsets.symmetric(
+              horizontal: SpaceSize.extraSmall,
+              vertical: SpaceSize.small,
+            ),
             child: Row(
               children: [
                 _NavItem(
@@ -66,20 +70,7 @@ class _AppShellState extends State<AppShell> {
                   selected: selected == 1,
                   onTap: _select,
                 ),
-                _NavItem(
-                  index: 2,
-                  label: 'Add',
-                  icon: Icons.add_rounded,
-                  emphasized: true,
-                  onTap: _select,
-                ),
-                _NavItem(
-                  index: 3,
-                  label: 'Transfer',
-                  icon: Icons.swap_horiz_rounded,
-                  emphasized: true,
-                  onTap: _select,
-                ),
+                _CenterActions(onTap: _select),
                 _NavItem(
                   index: 4,
                   label: 'Reports',
@@ -110,60 +101,101 @@ class _NavItem extends StatelessWidget {
     required this.icon,
     required this.onTap,
     this.selected = false,
-    this.emphasized = false,
   });
   final int index;
   final String label;
   final IconData icon;
   final ValueChanged<int> onTap;
   final bool selected;
-  final bool emphasized;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final foreground = emphasized
-        ? colors.onPrimary
-        : selected
-        ? colors.primary
-        : colors.onSurfaceVariant;
+    final foreground = selected ? colors.primary : colors.onSurfaceVariant;
     return Expanded(
       child: InkWell(
         onTap: () => onTap(index),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(RadiusSize.medium),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 3),
+          padding: const EdgeInsets.symmetric(vertical: SpaceSize.tiny),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: emphasized ? 44 : 40,
-                height: 40,
+                width: ComponentSize.navigationIconBox,
+                height: ComponentSize.navigationIconBox,
                 decoration: BoxDecoration(
-                  color: emphasized
-                      ? colors.primary
-                      : selected
+                  color: selected
                       ? colors.primaryContainer
                       : Colors.transparent,
-                  borderRadius: BorderRadius.circular(emphasized ? 14 : 20),
+                  borderRadius: BorderRadius.circular(RadiusSize.large),
                 ),
-                child: Icon(
-                  icon,
-                  color: foreground,
-                  size: emphasized ? 26 : 23,
-                ),
+                child: Icon(icon, color: foreground, size: IconSize.medium),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: SpaceSize.extraSmall),
               Text(
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: emphasized ? colors.primary : foreground,
-                  fontSize: 10,
-                  fontWeight: emphasized || selected
-                      ? FontWeight.w700
-                      : FontWeight.w500,
+                  color: foreground,
+                  fontSize: TextSize.extraSmall,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CenterActions extends StatelessWidget {
+  const _CenterActions({required this.onTap});
+  final ValueChanged<int> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Expanded(
+      flex: 2,
+      child: SizedBox(
+        height: ComponentSize.centerActionHeight,
+        child: Material(
+          color: colors.primary,
+          borderRadius: BorderRadius.circular(RadiusSize.small),
+          clipBehavior: Clip.antiAlias,
+          child: Row(
+            children: [
+              Expanded(
+                child: Tooltip(
+                  message: 'Add transaction',
+                  child: InkWell(
+                    onTap: () => onTap(2),
+                    child: Center(
+                      child: Icon(Icons.add_rounded, color: colors.onPrimary),
+                    ),
+                  ),
+                ),
+              ),
+              Container(
+                width: ComponentSize.centerActionDivider,
+                height: ComponentSize.centerActionHeight,
+                color: colors.onPrimary.withValues(alpha: .35),
+              ),
+              Expanded(
+                child: Tooltip(
+                  message: 'Transfer money',
+                  child: InkWell(
+                    onTap: () => onTap(3),
+                    child: Center(
+                      child: Icon(
+                        Icons.swap_horiz_rounded,
+                        color: colors.onPrimary,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ],

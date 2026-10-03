@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../app_services.dart';
+import '../app_sizes.dart';
 import '../controllers/home_controller.dart';
 import '../widgets/app_widgets.dart';
 import 'account_screen.dart';
@@ -39,7 +40,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final s = controller.summary;
       final currency = widget.services.currencyCode;
       return ListView(
-        padding: const EdgeInsets.only(bottom: 100),
+        padding: const EdgeInsets.only(bottom: SpaceSize.listBottom),
         children: [
           PageHeader(
             title: 'Overview',
@@ -51,12 +52,16 @@ class _HomeScreenState extends State<HomeScreen> {
             const Center(child: CircularProgressIndicator()),
           if (controller.error != null)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.symmetric(
+                horizontal: SpaceSize.extraLarge,
+              ),
               child: AppError(controller.error),
             ),
           if (s != null) ...[
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.symmetric(
+                horizontal: SpaceSize.extraLarge,
+              ),
               child: AppPanel(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -65,17 +70,17 @@ class _HomeScreenState extends State<HomeScreen> {
                       'TOTAL IN ACCOUNTS',
                       style: TextStyle(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        fontSize: 12,
+                        fontSize: TextSize.small,
                         fontWeight: FontWeight.w700,
-                        letterSpacing: 1.1,
+                        letterSpacing: TextSize.eyebrowLetterSpacing,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: SpaceSize.small),
                     Text(
                       money(s.totalBalanceMinor, currency),
                       style: Theme.of(context).textTheme.headlineMedium,
                     ),
-                    const SizedBox(height: 18),
+                    const SizedBox(height: SpaceSize.header),
                     Row(
                       children: [
                         Expanded(
@@ -86,7 +91,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             Icons.arrow_downward,
                           ),
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: SpaceSize.medium),
                         Expanded(
                           child: _MiniTotal(
                             'Expenses',
@@ -101,9 +106,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 22),
+            const SizedBox(height: SpaceSize.betweenCards),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.symmetric(
+                horizontal: SpaceSize.extraLarge,
+              ),
               child: Row(
                 children: [
                   Expanded(
@@ -114,7 +121,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       Icons.call_received,
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: SpaceSize.medium),
                   Expanded(
                     child: _StatCard(
                       'You owe',
@@ -126,9 +133,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: SpaceSize.medium),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.symmetric(
+                horizontal: SpaceSize.extraLarge,
+              ),
               child: Row(
                 children: [
                   Expanded(
@@ -139,7 +148,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       Icons.inventory_2_outlined,
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: SpaceSize.medium),
                   Expanded(
                     child: _StatCard(
                       'Tax paid',
@@ -151,14 +160,18 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: SpaceSize.section),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.symmetric(
+                horizontal: SpaceSize.extraLarge,
+              ),
               child: AppSectionTitle('Accounts'),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: SpaceSize.compact),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.symmetric(
+                horizontal: SpaceSize.extraLarge,
+              ),
               child: AppPanel(
                 child: s.accounts.isEmpty
                     ? const AppEmpty('Add an account to get started')
@@ -181,14 +194,18 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: SpaceSize.section),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.symmetric(
+                horizontal: SpaceSize.extraLarge,
+              ),
               child: AppSectionTitle('Quick actions'),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: SpaceSize.compact),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.symmetric(
+                horizontal: SpaceSize.extraLarge,
+              ),
               child: AppPanel(
                 child: Column(
                   children: [
@@ -244,10 +261,10 @@ class _MiniTotal extends StatelessWidget {
         children: [
           Icon(
             icon,
-            size: 16,
+            size: IconSize.extraSmall,
             color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: SpaceSize.extraSmall),
           Text(
             label,
             style: TextStyle(
@@ -256,7 +273,7 @@ class _MiniTotal extends StatelessWidget {
           ),
         ],
       ),
-      const SizedBox(height: 4),
+      const SizedBox(height: SpaceSize.extraSmall),
       Text(
         money(value, currency),
         style: TextStyle(
@@ -280,21 +297,21 @@ class _StatCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Icon(icon, color: Theme.of(context).colorScheme.primary),
-        const SizedBox(height: 12),
+        const SizedBox(height: SpaceSize.medium),
         Text(
           label,
           style: TextStyle(
             color: Theme.of(context).colorScheme.onSurfaceVariant,
-            fontSize: 13,
+            fontSize: TextSize.caption,
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: SpaceSize.extraSmall),
         Text(
           money(value, currency),
           style: TextStyle(
             fontWeight: FontWeight.w700,
             color: Theme.of(context).colorScheme.onSurface,
-            fontSize: 16,
+            fontSize: TextSize.large,
           ),
         ),
       ],

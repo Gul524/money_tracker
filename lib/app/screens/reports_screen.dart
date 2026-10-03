@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../app_services.dart';
+import '../app_sizes.dart';
 import '../controllers/home_controller.dart';
 import '../widgets/app_widgets.dart';
 
@@ -43,12 +44,16 @@ class _ReportsScreenState extends State<ReportsScreen> {
             const Center(child: CircularProgressIndicator()),
           if (controller.error != null)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.symmetric(
+                horizontal: SpaceSize.extraLarge,
+              ),
               child: AppError(controller.error),
             ),
           if (summary != null) ...[
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.symmetric(
+                horizontal: SpaceSize.extraLarge,
+              ),
               child: AppPanel(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -57,14 +62,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       'This month',
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: SpaceSize.extraSmall),
                     Text(
                       '${summary.asOf.year}-${summary.asOf.month.toString().padLeft(2, '0')}',
                       style: TextStyle(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: SpaceSize.medium),
                     AppValue(
                       label: 'Income',
                       value: money(summary.incomeMinor, currency),
@@ -91,9 +96,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: SpaceSize.large),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.symmetric(
+                horizontal: SpaceSize.extraLarge,
+              ),
               child: AppPanel(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -102,7 +109,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       'Current position',
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: SpaceSize.medium),
                     AppValue(
                       label: 'Account balances',
                       value: money(summary.totalBalanceMinor, currency),
@@ -124,7 +131,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
               ),
             ),
           ],
-          const SizedBox(height: 24),
+          const SizedBox(height: SpaceSize.section),
         ],
       );
     },

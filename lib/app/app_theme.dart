@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'app_sizes.dart';
 import 'widgets/app_widgets.dart';
 
 class AppTheme {
@@ -29,32 +30,44 @@ class AppTheme {
         backgroundColor: background,
         foregroundColor: foreground,
         centerTitle: false,
-        elevation: 0,
+        elevation: ComponentSize.appBarElevation,
       ),
       bottomSheetTheme: BottomSheetThemeData(backgroundColor: background),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: surface,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(RadiusSize.medium),
           borderSide: BorderSide(color: scheme.outlineVariant),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(RadiusSize.medium),
           borderSide: BorderSide(color: scheme.outlineVariant),
         ),
         contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 16,
+          horizontal: SpaceSize.large,
+          vertical: SpaceSize.large,
         ),
       ),
       textTheme: TextTheme(
         headlineMedium: TextStyle(
+          fontSize: TextSize.display,
           fontWeight: FontWeight.w800,
           color: foreground,
         ),
-        titleLarge: TextStyle(fontWeight: FontWeight.w700, color: foreground),
-        bodySmall: TextStyle(color: secondary),
+        titleLarge: TextStyle(
+          fontSize: TextSize.extraLarge,
+          fontWeight: FontWeight.w700,
+          color: foreground,
+        ),
+        titleMedium: const TextStyle(fontSize: TextSize.large),
+        titleSmall: const TextStyle(fontSize: TextSize.medium),
+        bodyLarge: const TextStyle(fontSize: TextSize.large),
+        bodyMedium: const TextStyle(fontSize: TextSize.medium),
+        bodySmall: TextStyle(fontSize: TextSize.small, color: secondary),
+        labelLarge: const TextStyle(fontSize: TextSize.medium),
+        labelMedium: const TextStyle(fontSize: TextSize.small),
+        labelSmall: const TextStyle(fontSize: TextSize.extraSmall),
       ),
     );
   }

@@ -28,18 +28,13 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('Overview'), findsOneWidget);
-    for (final label in [
-      'Home',
-      'History',
-      'Add',
-      'Transfer',
-      'Reports',
-      'Settings',
-    ]) {
+    for (final label in ['Home', 'History', 'Reports', 'Settings']) {
       expect(find.text(label), findsOneWidget);
     }
+    expect(find.byTooltip('Add transaction'), findsOneWidget);
+    expect(find.byTooltip('Transfer money'), findsOneWidget);
 
-    await tester.tap(find.text('Add'));
+    await tester.tap(find.byTooltip('Add transaction'));
     await tester.pump();
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 100)),
@@ -50,7 +45,7 @@ void main() {
     await tester.pageBack();
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Transfer'));
+    await tester.tap(find.byTooltip('Transfer money'));
     await tester.pumpAndSettle();
     expect(find.text('Transfer money'), findsOneWidget);
     await tester.pageBack();

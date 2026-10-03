@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../app_services.dart';
+import '../app_sizes.dart';
 import '../controllers/history_controller.dart';
 import '../widgets/app_widgets.dart';
 import 'transaction_screen.dart';
@@ -30,14 +31,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: controller,
     builder: (context, _) => ListView(
-      padding: const EdgeInsets.only(bottom: 100),
+      padding: const EdgeInsets.only(bottom: SpaceSize.listBottom),
       children: [
         const PageHeader(
           title: 'History',
           subtitle: 'Every money movement in one place',
         ),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
+          padding: const EdgeInsets.symmetric(horizontal: SpaceSize.extraLarge),
           child: controller.items.isEmpty
               ? const AppEmpty('No activity yet')
               : AppPanel(
@@ -89,7 +90,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 ),
         ),
         Padding(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(SpaceSize.extraLarge),
           child: AppError(controller.error),
         ),
       ],

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../data/models/money_transaction.dart';
 import '../app_services.dart';
+import '../app_sizes.dart';
 import '../controllers/transaction_controller.dart';
 import '../widgets/app_widgets.dart';
 import 'category_screen.dart';
@@ -69,7 +70,12 @@ class _TransactionScreenState extends State<TransactionScreen> {
               ],
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 10, 20, 120),
+        padding: const EdgeInsets.fromLTRB(
+          SpaceSize.extraLarge,
+          SpaceSize.compact,
+          SpaceSize.extraLarge,
+          SpaceSize.formBottom,
+        ),
         children: [
           Text(
             'Record money clearly',
@@ -77,7 +83,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: SpaceSize.header),
           AppPanel(
             child: Column(
               children: [
@@ -96,7 +102,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                   },
                   isViewOnly: widget.isViewOnly || widget.existing != null,
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: SpaceSize.form),
                 AppInput(
                   label: 'Amount (${widget.services.currencyCode})',
                   value: controller.amountText,
@@ -108,7 +114,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                   isViewOnly: widget.isViewOnly,
                 ),
                 if (!controller.isTax) ...[
-                  const SizedBox(height: 14),
+                  const SizedBox(height: SpaceSize.form),
                   AppSelect<int>(
                     key: ValueKey(controller.kind),
                     label: 'Category',
@@ -133,7 +139,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                           );
                           controller.refresh();
                         },
-                        icon: const Icon(Icons.add, size: 16),
+                        icon: const Icon(Icons.add, size: IconSize.extraSmall),
                         label: const Text('Manage categories'),
                       ),
                     ),
@@ -148,7 +154,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                   onChanged: controller.setAccount,
                   isViewOnly: widget.isViewOnly,
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: SpaceSize.extraSmall),
                 AppDateField(
                   label: 'Date',
                   value: controller.occurredAt,
@@ -182,13 +188,13 @@ class _TransactionScreenState extends State<TransactionScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: SpaceSize.form),
           AppError(controller.error),
           if (!widget.isViewOnly)
             FilledButton(
               onPressed: controller.busy ? null : _save,
               child: Padding(
-                padding: const EdgeInsets.all(14),
+                padding: const EdgeInsets.all(SpaceSize.form),
                 child: Text(controller.busy ? 'Saving…' : 'Save transaction'),
               ),
             ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../app_services.dart';
+import '../app_sizes.dart';
 import '../controllers/settings_controller.dart';
 import '../widgets/app_widgets.dart';
 
@@ -35,18 +36,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     animation: controller,
     builder: (context, _) {
       final content = ListView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(SpaceSize.extraLarge),
         children: [
           if (widget.embedded) ...[
             Text('Settings', style: Theme.of(context).textTheme.headlineMedium),
-            const SizedBox(height: 20),
+            const SizedBox(height: SpaceSize.extraLarge),
           ],
           AppPanel(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('General', style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 16),
+                const SizedBox(height: SpaceSize.large),
                 AppSelect<String>(
                   label: 'Display currency',
                   value: controller.currency,
@@ -60,7 +61,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     if (v != null) controller.setCurrency(v);
                   },
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: SpaceSize.large),
                 AppSelect<ThemeMode>(
                   label: 'Appearance',
                   value: controller.themeMode,
@@ -73,18 +74,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     if (value != null) controller.setThemeMode(value);
                   },
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: SpaceSize.medium),
                 Text(
                   'Currency changes how amounts are displayed. It does not convert saved amounts.',
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontSize: 13,
+                    fontSize: TextSize.caption,
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: SpaceSize.large),
           AppError(controller.error),
           const AppPanel(
             child: AppValue(

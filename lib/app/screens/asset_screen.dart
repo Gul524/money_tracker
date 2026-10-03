@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../data/models/asset.dart';
 import '../app_services.dart';
+import '../app_sizes.dart';
 import '../controllers/asset_controller.dart';
 import '../widgets/app_widgets.dart';
 
@@ -47,10 +48,10 @@ class _AssetScreenState extends State<AssetScreen> {
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       builder: (sheetContext) => Padding(
         padding: EdgeInsets.fromLTRB(
-          20,
-          20,
-          20,
-          MediaQuery.viewInsetsOf(sheetContext).bottom + 24,
+          SpaceSize.extraLarge,
+          SpaceSize.extraLarge,
+          SpaceSize.extraLarge,
+          MediaQuery.viewInsetsOf(sheetContext).bottom + SpaceSize.section,
         ),
         child: StatefulBuilder(
           builder: (context, setSheetState) => AnimatedBuilder(
@@ -64,13 +65,13 @@ class _AssetScreenState extends State<AssetScreen> {
                     existing == null ? 'New asset' : 'Edit asset',
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: SpaceSize.header),
                   AppInput(
                     label: 'Asset name',
                     value: name,
                     onChanged: (v) => name = v,
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: SpaceSize.medium),
                   AppInput(
                     label: 'Purchase amount (${widget.services.currencyCode})',
                     value: purchase,
@@ -79,7 +80,7 @@ class _AssetScreenState extends State<AssetScreen> {
                     ),
                     onChanged: (v) => purchase = v,
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: SpaceSize.medium),
                   AppInput(
                     label: 'Current value (${widget.services.currencyCode})',
                     value: current,
@@ -134,7 +135,7 @@ class _AssetScreenState extends State<AssetScreen> {
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: controller,
     builder: (context, _) => ListView(
-      padding: const EdgeInsets.only(bottom: 100),
+      padding: const EdgeInsets.only(bottom: SpaceSize.listBottom),
       children: [
         PageHeader(
           title: 'Assets',
@@ -149,7 +150,7 @@ class _AssetScreenState extends State<AssetScreen> {
                 ],
         ),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
+          padding: const EdgeInsets.symmetric(horizontal: SpaceSize.extraLarge),
           child: controller.items.isEmpty
               ? const AppEmpty('Add an asset to track its value')
               : AppPanel(
@@ -199,7 +200,7 @@ class _AssetScreenState extends State<AssetScreen> {
                 ),
         ),
         Padding(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(SpaceSize.extraLarge),
           child: AppError(controller.error),
         ),
       ],

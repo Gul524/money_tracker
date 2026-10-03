@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../app_services.dart';
+import '../app_sizes.dart';
 import '../controllers/splash_controller.dart';
 import '../widgets/app_widgets.dart';
 import 'app_shell.dart';
@@ -49,32 +50,32 @@ class _SplashScreenState extends State<SplashScreen> {
     builder: (context, _) => Scaffold(
       body: Center(
         child: Padding(
-          padding: const EdgeInsets.all(28),
+          padding: const EdgeInsets.all(SpaceSize.huge),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               CircleAvatar(
-                radius: 42,
+                radius: ComponentSize.splashLogoRadius,
                 backgroundColor: Theme.of(context).colorScheme.primary,
                 child: Icon(
                   Icons.account_balance_wallet_rounded,
                   color: Theme.of(context).colorScheme.onPrimary,
-                  size: 40,
+                  size: IconSize.large,
                 ),
               ),
-              const SizedBox(height: 22),
+              const SizedBox(height: SpaceSize.betweenCards),
               Text(
                 'Money Tracker',
                 style: Theme.of(context).textTheme.headlineMedium,
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: SpaceSize.small),
               Text(
                 'Know where your money stands',
                 style: TextStyle(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
-              const SizedBox(height: 28),
+              const SizedBox(height: SpaceSize.huge),
               if (controller.error == null)
                 const CircularProgressIndicator()
               else ...[

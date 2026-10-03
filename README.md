@@ -1,10 +1,20 @@
 # Money Tracker
 
+An editable description of the current interface is in [ui_ux.json](ui_ux.json). Change that file and share it to request UI updates; the app does not load the JSON at runtime.
+
+UI dimensions are centralized in [lib/app/app_sizes.dart](lib/app/app_sizes.dart). Edit `TextSize.extraLarge`, `CardSize.large`, `IconSize.medium`, `RadiusSize.extraLarge`, `SpaceSize.section`, or `ComponentSize.centerActionHeight` to adjust the corresponding sizes across the app. Cards grow with their content; `CardSize` controls their inner padding rather than setting a fixed card height. Flutter still applies the device's accessibility text scaling.
+
 A local first mobile app for recording income, expenses, money owed to you, money you owe, tax payments, transfers, accounts, and assets. The app now has a Flutter UI backed by controllers and SQLite repositories.
 
 ## Product and UI plan
 
-The interface uses an iOS inspired layout with clear totals, generous spacing, and familiar list rows. The bottom bar has Home, History, **Add**, **Transfer**, Reports, and Settings in that order. Add and Transfer are highlighted in the center and open their entry forms. Owe, Accounts, Assets, and Categories are reached from Home. Tax payments are entered from the transaction screen as a distinct record type.
+The interface uses an iOS inspired layout with clear totals, generous spacing, and familiar list rows. The bottom bar has Home, History, a single highlighted split action control, Reports, and Settings. The control's left **+** button opens a new transaction; its right **↔** button opens a transfer. Owe, Accounts, Assets, and Categories are reached from Home. Tax payments are entered from the transaction screen as a distinct record type.
+
+```text
+Home   History   ┌─────┬─────┐   Reports   Settings
+                 │  +  │  ↔  │
+                 └─────┴─────┘
+```
 
 | Screen | Purpose |
 | --- | --- |

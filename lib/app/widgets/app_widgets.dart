@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../app_sizes.dart';
+
 const ink = Color(0xFF17243B);
 const muted = Color(0xFF718096);
 const accent = Color(0xFF375CF5);
@@ -37,15 +39,15 @@ class AppPanel extends StatelessWidget {
   const AppPanel({
     super.key,
     required this.child,
-    this.padding = const EdgeInsets.all(20),
+    this.padding = const EdgeInsets.all(CardSize.large),
   });
   final Widget child;
   final EdgeInsets padding;
   @override
   Widget build(BuildContext context) => Material(
     color: Theme.of(context).colorScheme.surface,
-    borderRadius: BorderRadius.circular(24),
-    elevation: 2,
+    borderRadius: BorderRadius.circular(RadiusSize.extraLarge),
+    elevation: ComponentSize.panelElevation,
     shadowColor: Theme.of(context).shadowColor.withValues(alpha: 0.06),
     child: SizedBox(
       width: double.infinity,
@@ -108,12 +110,12 @@ class AppValue extends StatelessWidget {
   final String value;
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 8),
+    padding: const EdgeInsets.symmetric(vertical: SpaceSize.small),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label, style: Theme.of(context).textTheme.bodySmall),
-        const SizedBox(height: 4),
+        const SizedBox(height: SpaceSize.extraSmall),
         Text(value, style: Theme.of(context).textTheme.titleMedium),
       ],
     ),
@@ -227,11 +229,18 @@ class AppListItem extends StatelessWidget {
   final bool isViewOnly;
   @override
   Widget build(BuildContext context) => ListTile(
-    contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+    contentPadding: const EdgeInsets.symmetric(
+      horizontal: SpaceSize.extraSmall,
+      vertical: SpaceSize.tiny,
+    ),
     leading: CircleAvatar(
       backgroundColor: Theme.of(context).colorScheme.primary
           .withValues(alpha: .12),
-      child: Icon(icon, color: Theme.of(context).colorScheme.primary, size: 20),
+      child: Icon(
+        icon,
+        color: Theme.of(context).colorScheme.primary,
+        size: IconSize.small,
+      ),
     ),
     title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
     subtitle: Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -253,16 +262,16 @@ class AppEmpty extends StatelessWidget {
   final IconData icon;
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.all(40),
+    padding: const EdgeInsets.all(SpaceSize.emptyState),
     child: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(
           icon,
-          size: 42,
+          size: IconSize.extraLarge,
           color: Theme.of(context).colorScheme.onSurfaceVariant,
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: SpaceSize.medium),
         Text(
           message,
           textAlign: TextAlign.center,
@@ -282,7 +291,7 @@ class AppError extends StatelessWidget {
   Widget build(BuildContext context) => message == null
       ? const SizedBox.shrink()
       : Padding(
-          padding: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.only(bottom: SpaceSize.medium),
           child: Text(
             message!,
             style: TextStyle(color: Theme.of(context).colorScheme.error),
@@ -302,7 +311,12 @@ class PageHeader extends StatelessWidget {
   final List<Widget> actions;
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+    padding: const EdgeInsets.fromLTRB(
+      SpaceSize.extraLarge,
+      SpaceSize.header,
+      SpaceSize.extraLarge,
+      SpaceSize.header,
+    ),
     child: Row(
       children: [
         Expanded(
@@ -311,7 +325,7 @@ class PageHeader extends StatelessWidget {
             children: [
               Text(title, style: Theme.of(context).textTheme.headlineMedium),
               if (subtitle != null) ...[
-                const SizedBox(height: 4),
+                const SizedBox(height: SpaceSize.extraSmall),
                 Text(
                   subtitle!,
                   style: TextStyle(

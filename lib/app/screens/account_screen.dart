@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../data/models/account.dart';
 import '../../data/models/model_types.dart';
 import '../app_services.dart';
+import '../app_sizes.dart';
 import '../controllers/account_controller.dart';
 import '../widgets/app_widgets.dart';
 
@@ -45,10 +46,10 @@ class _AccountScreenState extends State<AccountScreen> {
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       builder: (sheetContext) => Padding(
         padding: EdgeInsets.fromLTRB(
-          20,
-          20,
-          20,
-          MediaQuery.viewInsetsOf(sheetContext).bottom + 24,
+          SpaceSize.extraLarge,
+          SpaceSize.extraLarge,
+          SpaceSize.extraLarge,
+          MediaQuery.viewInsetsOf(sheetContext).bottom + SpaceSize.section,
         ),
         child: StatefulBuilder(
           builder: (context, setSheetState) => AnimatedBuilder(
@@ -62,13 +63,13 @@ class _AccountScreenState extends State<AccountScreen> {
                     existing == null ? 'New account' : 'Edit account',
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: SpaceSize.header),
                   AppInput(
                     label: 'Name',
                     value: name,
                     onChanged: (v) => name = v,
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: SpaceSize.medium),
                   AppSelect<AccountType>(
                     label: 'Account type',
                     value: type,
@@ -81,7 +82,7 @@ class _AccountScreenState extends State<AccountScreen> {
                       if (v != null) setSheetState(() => type = v);
                     },
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: SpaceSize.medium),
                   AppInput(
                     label: 'Opening balance (${widget.services.currencyCode})',
                     value: opening,
@@ -127,7 +128,7 @@ class _AccountScreenState extends State<AccountScreen> {
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: controller,
     builder: (context, _) => ListView(
-      padding: const EdgeInsets.only(bottom: 100),
+      padding: const EdgeInsets.only(bottom: SpaceSize.listBottom),
       children: [
         PageHeader(
           title: 'Accounts',
@@ -142,7 +143,7 @@ class _AccountScreenState extends State<AccountScreen> {
                 ],
         ),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
+          padding: const EdgeInsets.symmetric(horizontal: SpaceSize.extraLarge),
           child: controller.items.isEmpty
               ? const AppEmpty('Add your first account')
               : AppPanel(
@@ -192,7 +193,7 @@ class _AccountScreenState extends State<AccountScreen> {
                 ),
         ),
         Padding(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(SpaceSize.extraLarge),
           child: AppError(controller.error),
         ),
       ],
