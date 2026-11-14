@@ -1,181 +1,133 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "app": {
     "name": "Money Tracker",
-    "platform": "Flutter mobile",
-    "style": "Clean, iOS-inspired personal finance interface",
+    "platform": "Flutter mobile (Material 3)",
+    "style": "Classic, calm personal-finance interface: neutral grouped surfaces, one brand-colored hero, plain language",
     "designGoals": [
-      "Show key money totals at a glance",
-      "Make adding a transaction or transfer quick",
-      "Keep forms and lists readable in light and dark modes"
+      "A first-time user can record an expense without instructions",
+      "The most important number (total balance) is seen first",
+      "Every feature is reachable from a visible place (Home or Settings)",
+      "Readable type, 48 dp touch targets, correct in light and dark modes"
+    ],
+    "principles": [
+      "Inset grouped lists (iOS Settings / Google Wallet) for related rows",
+      "Single high-emphasis surface per screen; everything else neutral",
+      "Frequency-based prominence: Expense and Income get the biggest targets",
+      "Color carries meaning only: green = money in, red = overdue/negative, amber = owed, blue = transfer/brand",
+      "No gradients, glows, uppercase eyebrows or decorative emoji"
     ]
   },
   "designTokens": {
     "colors": {
       "light": {
-        "background": "#F5F7FB",
+        "background": "#F3F4F6",
         "surface": "#FFFFFF",
-        "textPrimary": "#17243B",
-        "textSecondary": "#718096",
-        "accent": "#375CF5"
+        "field": "#F0F2F5",
+        "textPrimary": "#101828",
+        "textSecondary": "#667085",
+        "outlineVariant": "#E6E8EC",
+        "primary": "#2C5BE0",
+        "primaryContainer": "#E3EAFD"
       },
       "dark": {
-        "background": "#101827",
-        "surface": "#1C2940",
-        "textPrimary": "#F2F5FC",
-        "textSecondary": "#B4C1D4",
-        "accent": "#91A9FF"
+        "background": "#0C0E13",
+        "surface": "#171A21",
+        "field": "#20242D",
+        "textPrimary": "#ECEEF2",
+        "textSecondary": "#98A2B3",
+        "outlineVariant": "#252A34",
+        "primary": "#8AA8FF",
+        "primaryContainer": "#23315C"
       },
       "semantic": {
-        "error": "Use theme error color",
-        "positive": "Use theme tertiary color"
+        "income": { "light": "#0F8A5F", "dark": "#45CF92" },
+        "expense": { "light": "#D92D20", "dark": "#FF7A6E" },
+        "transfer": { "light": "#2C5BE0", "dark": "#8AA8FF" },
+        "warning": { "light": "#B54708", "dark": "#F5A14A" },
+        "source": "lib/app/app_theme.dart → AppColors ThemeExtension"
       }
     },
     "spacingDp": {
-      "small": 8,
-      "medium": 12,
-      "large": 16,
-      "screenHorizontal": 20,
-      "panelPadding": 20,
-      "sectionGap": 24
+      "grid": 4,
+      "screenGutter": 16,
+      "cardPadding": 16,
+      "heroPadding": 20,
+      "sectionGap": 28,
+      "fabClearance": 96
     },
-    "radiusDp": {
-      "panel": 24,
-      "input": 16,
-      "centerAction": 18
-    },
+    "radiusDp": { "small": 8, "medium": 12, "card": 16, "hero": 20, "sheet": 28 },
     "typography": {
-      "pageTitle": { "weight": 800, "role": "headlineMedium" },
-      "sectionTitle": { "weight": 700, "role": "titleLarge" },
-      "body": { "role": "bodyMedium" },
-      "supporting": { "role": "bodySmall", "color": "textSecondary" },
-      "bottomNavigationLabel": { "sizeSp": 10, "selectedWeight": 700 }
-    }
+      "heroAmount": { "sizeSp": 32, "weight": 700, "role": "displaySmall", "tabularFigures": true },
+      "amountInput": { "sizeSp": 44, "weight": 700 },
+      "pageTitle": { "role": "SliverAppBar.medium title" },
+      "sectionTitle": { "sizeSp": 16, "weight": 600, "role": "titleMedium" },
+      "rowTitle": { "sizeSp": 16, "weight": 500, "role": "bodyLarge" },
+      "body": { "sizeSp": 14, "role": "bodyMedium" },
+      "supporting": { "sizeSp": 12, "role": "bodySmall", "color": "textSecondary" },
+      "navigationLabel": { "sizeSp": 12, "selectedWeight": 600 }
+    },
+    "money": "Currency symbol + thousands separators, e.g. Rs 12,345.00, $1,200.00, −Rs 500.00; signed (+/−) in activity lists"
   },
   "navigation": {
-    "type": "floatingRoundedBottomBar",
-    "order": ["home", "history", "centerActions", "reports", "settings"],
+    "type": "Material 3 NavigationBar with hairline top border",
     "destinations": [
-      { "id": "home", "label": "Home", "icon": "grid_view_rounded", "screen": "home" },
-      { "id": "history", "label": "History", "icon": "history_rounded", "screen": "history" },
-      { "id": "reports", "label": "Reports", "icon": "bar_chart_rounded", "screen": "reports" },
-      { "id": "settings", "label": "Settings", "icon": "settings_outlined", "screen": "settings" }
+      { "id": "home", "label": "Home", "icon": "home_outlined" },
+      { "id": "history", "label": "History", "icon": "receipt_long_outlined" },
+      { "id": "reports", "label": "Reports", "icon": "insights_outlined" },
+      { "id": "settings", "label": "Settings", "icon": "settings_outlined" }
     ],
-    "centerActions": {
-      "style": "elevated rounded split control with a full-height vertical divider and bottom clearance",
-      "heightDp": 52,
-      "halves": [
-        { "id": "add", "icon": "add_rounded", "tooltip": "Add transaction", "opens": "transactionForm" },
-        { "id": "transfer", "icon": "swap_horiz_rounded", "tooltip": "Transfer money", "opens": "transferForm" }
-      ],
-      "behavior": "Each half is independently tappable and opens a form above the current tab."
+    "tabState": "IndexedStack — tabs keep scroll position",
+    "primaryAction": {
+      "widget": "FloatingActionButton.extended  '+ Add'",
+      "shownOn": ["home", "history", "owe"],
+      "opens": "addMenu"
     },
     "defaultTab": "home"
   },
   "sharedComponents": {
-    "panel": "Rounded surface card with 20 dp padding and subtle elevation",
-    "pageHeader": "Large title, optional supporting subtitle and optional actions",
-    "listItem": "Leading circular icon, title, one-line subtitle and optional trailing value or action",
-    "input": "Filled outlined field; view-only mode shows a label and value",
-    "select": "Filled dropdown; view-only mode shows a label and value",
-    "dateField": "Tappable row that opens a date picker",
-    "emptyState": "Centered icon and short message",
-    "error": "Inline error text using the theme error color"
+    "SectionHeader": "titleMedium label above a group, optional text action on the right",
+    "GroupedCard": "White card, 16 radius, hairline border, rows separated by dividers inset to the text",
+    "AppTile": "IconBadge + title/subtitle + trailing + chevron, min height 60",
+    "IconBadge": "40 dp rounded-square tinted container with icon",
+    "FormRow": "Form row 'icon  Label ........ value >' that opens a picker",
+    "FormTextRow": "Borderless text input row inside a GroupedCard",
+    "AmountField": "Large centered amount input with currency symbol",
+    "ActivityTile": "Activity row: category icon, title, subtitle, signed amount, Pending pill",
+    "showPickerSheet": "Bottom-sheet single choice list with check mark",
+    "SheetScaffold": "Editor sheet: title, fields, error, full-width Save, optional neutral and destructive actions",
+    "BottomActionBar": "Pinned primary button that rises above the keyboard",
+    "EmptyState / ErrorBanner / InfoNote": "Friendly empty, error and helper messaging"
   },
   "screens": {
-    "splash": {
-      "title": "Money Tracker",
-      "subtitle": "Know where your money stands",
-      "layout": "Centered logo, title, subtitle and loading indicator",
-      "onSuccess": "home",
-      "onError": "Show message and Try again button"
-    },
-    "home": {
-      "title": "Overview",
-      "subtitle": "Current date and This month",
-      "layout": "Vertical dashboard with prominent balance, monthly flow, financial position, accounts and recent activity",
-      "sections": [
-        { "id": "balance", "type": "hero", "content": ["Total in accounts", "Net this month"] },
-        { "id": "cashFlow", "type": "flowPanel", "content": ["Monthly income", "Monthly expenses", "Proportion bar"] },
-        { "id": "position", "type": "metricList", "content": ["Owed to you", "You owe", "Assets", "Tax paid this month"] },
-        { "id": "accounts", "type": "accountList", "content": ["Account name", "Account type", "Calculated balance"] },
-        { "id": "recentActivity", "type": "activityList", "content": ["Five latest transactions, transfers or tax payments", "See all"] }
-      ]
-    },
-    "history": {
-      "title": "History",
-      "subtitle": "Every money movement in one place",
-      "layout": "Date-ordered activity list",
-      "itemTypes": ["Transaction", "Tax payment", "Transfer"],
-      "itemContent": ["Type icon", "Title", "Details and date", "Amount"],
-      "interaction": "Tap a transaction to edit or delete it; tax payments and transfers are read-only in this list.",
-      "emptyState": "No activity yet"
-    },
-    "reports": {
-      "title": "Reports",
-      "subtitle": "A snapshot of your money",
-      "layout": "Vertical list of two panels",
-      "sections": [
-        { "title": "This month", "fields": ["Income", "Expenses", "Tax paid", "Net after expenses and tax"] },
-        { "title": "Current position", "fields": ["Account balances", "Owed to you", "You owe", "Asset value"] }
-      ]
-    },
-    "settings": {
-      "title": "Settings",
-      "sections": [
-        { "title": "General", "fields": [
-          { "label": "Display currency", "type": "select", "options": ["PKR", "USD", "EUR", "GBP"], "default": "PKR" },
-          { "label": "Appearance", "type": "select", "options": ["Use device setting", "Light", "Dark"], "default": "Light" }
-        ] },
-        { "title": "Storage", "value": "Saved locally on this device" }
-      ],
-      "notes": ["Changing display currency does not convert stored amounts.", "Appearance is saved locally."]
-    },
-    "transactionForm": {
-      "title": "New transaction",
-      "presentation": "Full screen pushed from the Add half of the center control",
-      "fields": ["Type", "Amount", "Category", "Account", "Date", "Person or business when owing", "Due date when owing", "Note"],
-      "typeOptions": ["Expense", "Income", "Owed to me", "I owe", "Tax paid"],
-      "actions": ["Manage categories", "Save transaction", "Delete when editing"]
-    },
-    "transferForm": {
-      "title": "Transfer money",
-      "presentation": "Full screen pushed from the Transfer half of the center control",
-      "fields": ["From account", "To account", "Amount", "Date", "Note"],
-      "primaryAction": "Transfer"
-    },
-    "owe": {
-      "title": "Owe",
-      "entryPoint": "Home position section",
-      "content": "Pending money to receive and repay, with amount and optional due date",
-      "interaction": "Tap an item, choose an account, and mark it completed."
-    },
-    "accounts": {
-      "title": "Accounts",
-      "entryPoint": "Home accounts section",
-      "content": "Account list with name, type and calculated balance",
-      "formFields": ["Name", "Account type", "Opening balance", "Archived when editing"],
-      "actions": ["Add", "Edit", "Delete when allowed"]
-    },
-    "assets": {
-      "title": "Assets",
-      "entryPoint": "Home position section",
-      "content": "Asset list with current value",
-      "formFields": ["Name", "Acquisition cost", "Current value", "Acquired on", "Notes"],
-      "actions": ["Add", "Edit", "Delete when allowed"]
-    },
-    "categories": {
-      "title": "Categories",
-      "entryPoint": "Transaction form",
-      "content": "Nested income, expense or both categories",
-      "formFields": ["Name", "Type", "Parent category"],
-      "actions": ["Add", "Edit", "Delete when allowed"]
-    }
+    "splash": "Brand mark, name, tagline, small spinner; friendly retry on error; fades into the shell",
+    "home": [
+      "Large title 'Overview' + long date",
+      "Balance card (only colored surface): Total balance, account count, net this month",
+      "Welcome card with 'Add your first entry' when there is no activity",
+      "This month: Income | Spent stat cards",
+      "Money owed: Owed to you | You owe cards → Money owed",
+      "Accounts (Manage →) grouped list with balances",
+      "Recent activity (See all → History) 5 rows",
+      "Assets and tax"
+    ],
+    "addMenu": "Bottom sheet 'What would you like to add?': large Expense / Income cards, then Transfer, Someone owes me, I owe someone, Tax payment",
+    "transactionForm": "Type chips (new only) → big amount → [Category, Account, Date, Due date] → [Person, Note] → helper note → pinned Save. Delete icon when editing",
+    "transferForm": "Big amount → From/To with swap button → Date + Note → explanation → pinned Transfer",
+    "history": "Search field, filter chips (All, Expenses, Income, Transfers, Owed, Tax), groups by day (Today/Yesterday/…) with daily net",
+    "reports": "Month switcher → Net for the month card with income/outflow bar → Spending by category (bars + %) → Income by category → Where you stand today + Net worth",
+    "settings": "Preferences (Currency picker, Appearance segmented System/Light/Dark) → Manage (Accounts, Categories, Money owed, Assets) → About",
+    "accounts": "Total card, Active and Archived groups; tap to edit in sheet (name, Cash/Bank segmented, starting balance, archive switch, delete)",
+    "assets": "Total value card, assets with gain/loss; sheet (name, price paid, worth today, bought on, notes, delete)",
+    "categories": "Expenses / Income / Both sections, indented tree; sheet (name, used-for segmented, Inside parent picker, delete)",
+    "owe": "Owed to you / You owe sections with totals; overdue in red; tap → Mark as received/paid sheet with account choice and Edit details"
   },
   "interactionRules": [
-    "Show local currency code next to formatted amounts.",
-    "Show a confirmation dialog before irreversible deletion.",
-    "Show inline validation and database errors near the relevant form.",
-    "Use the same layout and readable contrast in light and dark themes."
+    "Saving from the Add flow shows a 'Saved' snackbar",
+    "Destructive actions always confirm in a dialog with a red Delete",
+    "Pickers are bottom sheets; editors are bottom sheets; full forms are pushed pages",
+    "A single non-archived account is preselected on new entries",
+    "Amount fields accept digits and up to 2 decimals only",
+    "Archived accounts are hidden from pickers but kept in history"
   ]
 }

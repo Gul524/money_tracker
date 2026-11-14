@@ -8,19 +8,15 @@ import '../controllers/account_controller.dart';
 import '../widgets/app_widgets.dart';
 
 class AccountScreen extends StatefulWidget {
-  const AccountScreen({
-    super.key,
-    required this.services,
-    this.isViewOnly = false,
-  });
+  const AccountScreen({super.key, required this.services});
   final AppServices services;
-  final bool isViewOnly;
   @override
   State<AccountScreen> createState() => _AccountScreenState();
 }
 
 class _AccountScreenState extends State<AccountScreen> {
   late final AccountController controller;
+
   @override
   void initState() {
     super.initState();
@@ -34,168 +30,188 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 
   Future<void> _edit([Account? existing]) async {
+    controller.clearError();
     var name = existing?.name ?? '';
     var type = existing?.type ?? AccountType.cash;
-    var opening = existing == null
-        ? '0.00'
-        : (existing.openingBalanceMinor / 100).toStringAsFixed(2);
+    final openingMinor = existing?.openingBalanceMinor ?? 0;
+    var opening = openingMinor == 0
+        ? ''
+        : '${openingMinor < 0 ? '-' : ''}${amountInputText(openingMinor.abs())}';
     var archived = existing?.isArchived ?? false;
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      builder: (sheetContext) => Padding(
-        padding: EdgeInsets.fromLTRB(
-          SpaceSize.extraLarge,
-          SpaceSize.extraLarge,
-          SpaceSize.extraLarge,
-          MediaQuery.viewInsetsOf(sheetContext).bottom + SpaceSize.section,
-        ),
-        child: StatefulBuilder(
-          builder: (context, setSheetState) => AnimatedBuilder(
-            animation: controller,
-            builder: (context, _) => SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    existing == null ? 'New account' : 'Edit account',
-                    style: Theme.of(context).textTheme.titleLarge,
+
+    await showAppSheet<void>(
+      context,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) => AnimatedBuilder(
+          animation: controller,
+          builder: (context, _) => SheetScaffold(
+            title: existing == null ? 'New account' : 'Edit account',
+            error: controller.error,
+            busy: controller.busy,
+            primaryLabel: 'Save',
+            onPrimary: () async {
+              final ok = await controller.save(
+                id: existing?.id,
+                name: name,
+                type: type,
+                openingBalance: opening.trim().isEmpty ? '0' : opening,
+                isArchived: archived,
+              );
+              if (ok && sheetContext.mounted) Navigator.pop(sheetContext);
+            },
+            destructiveLabel: existing == null ? null : 'Delete account',
+            onDestructive: () async {
+              final confirmed = await confirmDelete(
+                context,
+                title: 'Delete ${existing!.name}?',
+                message:
+                    'Accounts with recorded activity can’t be deleted. '
+                    'Archive them instead to hide them.',
+              );
+              if (confirmed &&
+                  await controller.remove(existing.id!) &&
+                  sheetContext.mounted) {
+                Navigator.pop(sheetContext);
+              }
+            },
+            children: [
+              AppTextField(
+                label: 'Account name',
+                hint: 'e.g. Wallet, HBL Current',
+                value: name,
+                capitalization: TextCapitalization.words,
+                onChanged: (v) => name = v,
+              ),
+              const SizedBox(height: SpaceSize.large),
+              SegmentedButton<AccountType>(
+                segments: const [
+                  ButtonSegment(
+                    value: AccountType.cash,
+                    label: Text('Cash'),
+                    icon: Icon(Icons.payments_outlined),
                   ),
-                  const SizedBox(height: SpaceSize.header),
-                  AppInput(
-                    label: 'Name',
-                    value: name,
-                    onChanged: (v) => name = v,
-                  ),
-                  const SizedBox(height: SpaceSize.medium),
-                  AppSelect<AccountType>(
-                    label: 'Account type',
-                    value: type,
-                    items: const {
-                      AccountType.cash: 'Cash',
-                      AccountType.bank: 'Bank',
-                    },
-                    onChanged: (v) {
-                      if (v != null) setSheetState(() => type = v);
-                    },
-                  ),
-                  const SizedBox(height: SpaceSize.medium),
-                  AppInput(
-                    label: 'Opening balance (${widget.services.currencyCode})',
-                    value: opening,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    onChanged: (v) => opening = v,
-                  ),
-                  if (existing != null)
-                    SwitchListTile(
-                      title: const Text('Archived'),
-                      value: archived,
-                      onChanged: (v) => setSheetState(() => archived = v),
-                    ),
-                  AppError(controller.error),
-                  FilledButton(
-                    onPressed: controller.busy
-                        ? null
-                        : () async {
-                            if (await controller.save(
-                                  id: existing?.id,
-                                  name: name,
-                                  type: type,
-                                  openingBalance: opening,
-                                  isArchived: archived,
-                                ) &&
-                                sheetContext.mounted) {
-                              Navigator.of(sheetContext).pop();
-                            }
-                          },
-                    child: const Text('Save account'),
+                  ButtonSegment(
+                    value: AccountType.bank,
+                    label: Text('Bank'),
+                    icon: Icon(Icons.account_balance_outlined),
                   ),
                 ],
+                selected: {type},
+                onSelectionChanged: (v) => setSheetState(() => type = v.first),
               ),
-            ),
+              const SizedBox(height: SpaceSize.large),
+              AppTextField(
+                label: 'Starting balance',
+                hint: '0',
+                prefixText: '${currencySymbol(widget.services.currencyCode)} ',
+                helper:
+                    'How much was in this account when you started tracking.',
+                value: opening,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                  signed: true,
+                ),
+                onChanged: (v) => opening = v,
+              ),
+              if (existing != null) ...[
+                const SizedBox(height: SpaceSize.small),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Archive account'),
+                  subtitle: const Text(
+                    'Hide it when adding new entries. History is kept.',
+                  ),
+                  value: archived,
+                  onChanged: (v) => setSheetState(() => archived = v),
+                ),
+              ],
+            ],
           ),
         ),
       ),
     );
   }
 
+  Widget _tile(Account a) => AppTile(
+    leading: IconBadge(
+      a.type == AccountType.bank
+          ? Icons.account_balance_outlined
+          : Icons.payments_outlined,
+    ),
+    title: a.name,
+    subtitle: a.type == AccountType.bank ? 'Bank' : 'Cash',
+    trailing: AmountText(
+      controller.balances[a.id] ?? 0,
+      currency: widget.services.currencyCode,
+      tone: a.isArchived
+          ? AmountTone.muted
+          : (controller.balances[a.id] ?? 0) < 0
+          ? AmountTone.expense
+          : AmountTone.neutral,
+    ),
+    onTap: () => _edit(a),
+  );
+
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: controller,
-    builder: (context, _) => ListView(
-      padding: const EdgeInsets.only(bottom: SpaceSize.listBottom),
-      children: [
-        PageHeader(
-          title: 'Accounts',
-          subtitle: 'Your cash and financial accounts',
-          actions: widget.isViewOnly
-              ? []
-              : [
-                  IconButton(
-                    onPressed: () => _edit(),
-                    icon: const Icon(Icons.add_circle_outline),
+    builder: (context, _) {
+      final active = controller.items.where((a) => !a.isArchived).toList();
+      final archived = controller.items.where((a) => a.isArchived).toList();
+      final total = active.fold<int>(
+        0,
+        (s, a) => s + (controller.balances[a.id] ?? 0),
+      );
+      return Scaffold(
+        appBar: AppBar(title: const Text('Accounts')),
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: () => _edit(),
+          icon: const Icon(Icons.add_rounded),
+          label: const Text('Add account'),
+        ),
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(
+            SpaceSize.gutter,
+            SpaceSize.small,
+            SpaceSize.gutter,
+            SpaceSize.fabClearance,
+          ),
+          children: [
+            ErrorBanner(controller.error),
+            if (controller.items.isEmpty && !controller.busy)
+              EmptyState(
+                icon: Icons.account_balance_wallet_outlined,
+                title: 'No accounts yet',
+                message: 'Add the places you keep money, like a wallet or a bank account.',
+                actionLabel: 'Add account',
+                onAction: () => _edit(),
+              )
+            else ...[
+              GroupedCard(
+                children: [
+                  AppTile(
+                    title: 'Total in active accounts',
+                    trailing: AmountText(
+                      total,
+                      currency: widget.services.currencyCode,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
                   ),
                 ],
+              ),
+              const SectionHeader('Active'),
+              if (active.isEmpty)
+                const InfoNote('All accounts are archived.')
+              else
+                GroupedCard(children: [for (final a in active) _tile(a)]),
+              if (archived.isNotEmpty) ...[
+                const SectionHeader('Archived'),
+                GroupedCard(children: [for (final a in archived) _tile(a)]),
+              ],
+            ],
+          ],
         ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: SpaceSize.extraLarge),
-          child: controller.items.isEmpty
-              ? const AppEmpty('Add your first account')
-              : AppPanel(
-                  child: Column(
-                    children: [
-                      for (final a in controller.items)
-                        AppListItem(
-                          title: a.name,
-                          subtitle:
-                              '${a.type.name}${a.isArchived ? ' · Archived' : ''}',
-                          icon: Icons.account_balance_wallet_outlined,
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                money(
-                                  controller.balances[a.id] ?? 0,
-                                  widget.services.currencyCode,
-                                ),
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              if (!widget.isViewOnly)
-                                PopupMenuButton<String>(
-                                  tooltip: 'Account actions',
-                                  onSelected: (action) async {
-                                    if (action == 'delete' &&
-                                        await confirmDelete(context, a.name)) {
-                                      await controller.remove(a.id!);
-                                    }
-                                  },
-                                  itemBuilder: (_) => const [
-                                    PopupMenuItem(
-                                      value: 'delete',
-                                      child: Text('Delete account'),
-                                    ),
-                                  ],
-                                ),
-                            ],
-                          ),
-                          onTap: () => _edit(a),
-                          isViewOnly: widget.isViewOnly,
-                        ),
-                    ],
-                  ),
-                ),
-        ),
-        Padding(
-          padding: const EdgeInsets.all(SpaceSize.extraLarge),
-          child: AppError(controller.error),
-        ),
-      ],
-    ),
+      );
+    },
   );
 }

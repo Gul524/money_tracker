@@ -8,6 +8,19 @@ class AccountOverview {
   final int balanceMinor;
 }
 
+class CategoryTotal {
+  const CategoryTotal({
+    required this.categoryId,
+    required this.name,
+    required this.isIncome,
+    required this.totalMinor,
+  });
+  final int categoryId;
+  final String name;
+  final bool isIncome;
+  final int totalMinor;
+}
+
 class DashboardSummary {
   const DashboardSummary({
     required this.asOf,
@@ -79,6 +92,35 @@ class DashboardService {
       assetValueMinor: assets.first['total'] as int,
       accounts: accounts,
     );
+  }
+
+  /// Income and expense totals per category for the month containing [month],
+  /// largest first. Owes are excluded because they are not income/expense.
+  Future<List<CategoryTotal>> categoryTotals(DateTime month) async {
+    final start = DateTime(month.year, month.month).toIso8601String();
+    final end = DateTime(month.year, month.month + 1).toIso8601String();
+    final db = await storage.database;
+    final rows = await db.rawQuery(
+      '''
+      SELECT t.category_id AS id, c.name AS name, t.type AS type,
+        SUM(t.amount_minor) AS total
+      FROM transactions t JOIN categories c ON c.id = t.category_id
+      WHERE t.type IN ('income', 'expense')
+        AND t.occurred_at >= ? AND t.occurred_at < ?
+      GROUP BY t.category_id, t.type
+      ORDER BY total DESC
+    ''',
+      [start, end],
+    );
+    return [
+      for (final row in rows)
+        CategoryTotal(
+          categoryId: row['id'] as int,
+          name: row['name'] as String,
+          isIncome: row['type'] == 'income',
+          totalMinor: row['total'] as int,
+        ),
+    ];
   }
 
   Future<List<AccountOverview>> _loadAccounts() async {

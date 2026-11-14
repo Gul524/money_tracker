@@ -1,16 +1,20 @@
 import 'package:flutter/material.dart';
 
-import '../../data/services/activity_service.dart';
+import '../../data/models/model_types.dart';
 import '../../data/services/dashboard_service.dart';
 import '../app_services.dart';
 import '../app_sizes.dart';
+import '../app_theme.dart';
 import '../controllers/home_controller.dart';
 import '../widgets/app_widgets.dart';
 import 'account_screen.dart';
+import 'add_entry_sheet.dart';
 import 'asset_screen.dart';
 import 'owe_screen.dart';
 import 'transaction_screen.dart';
 
+/// Dashboard. Content is ordered by what people check most: total balance,
+/// this month's flow, money owed, accounts, then recent activity.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, required this.services, this.onShowHistory});
   final AppServices services;
@@ -35,608 +39,477 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  Future<void> _open(Widget page) async {
-    await Navigator.of(context)
-        .push(MaterialPageRoute<void>(builder: (_) => page));
-    if (mounted) controller.refresh();
-  }
+  Future<void> _open(Widget page) =>
+      Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => page));
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: controller,
     builder: (context, _) {
       final summary = controller.summary;
-      final colors = Theme.of(context).colorScheme;
+      final theme = Theme.of(context);
       final currency = widget.services.currencyCode;
-      return RefreshIndicator(
-        onRefresh: controller.load,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, SpaceSize.listBottom),
-          children: [
-            Text('YOUR MONEY', style: _eyebrow(context)),
-            const SizedBox(height: 5),
-            Text('Overview', style: Theme.of(context).textTheme.headlineMedium),
-            const SizedBox(height: 4),
-            Text(
-              summary == null
-                  ? 'Your financial picture'
-                  : '${_month(summary.asOf.month)} ${summary.asOf.day}, ${summary.asOf.year} · This month',
-              style: TextStyle(color: colors.onSurfaceVariant),
-            ),
-            const SizedBox(height: 22),
-            if (controller.busy && summary == null)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 20),
-                child: Center(child: Text('Loading overview…')),
-              ),
-            if (controller.error != null) AppError(controller.error),
-            if (summary != null) ...[
-              _BalanceHero(summary: summary, currency: currency),
-              const SizedBox(height: 28),
-              _SectionHeading(title: 'This month', caption: 'Cash flow'),
-              const SizedBox(height: 12),
-              _CashFlow(summary: summary, currency: currency),
-              const SizedBox(height: 30),
-              _SectionHeading(
-                title: 'Your position',
-                caption: 'Across all records',
-              ),
-              const SizedBox(height: 12),
-              _PositionList(
-                summary: summary,
-                currency: currency,
-                onOwe: () => _open(OweScreen(services: widget.services)),
-                onAssets: () => _open(AssetScreen(services: widget.services)),
-              ),
-              const SizedBox(height: 30),
-              _SectionHeading(
-                title: 'Accounts',
-                caption: '${summary.accounts.length} total',
-                onTap: () => _open(AccountScreen(services: widget.services)),
-              ),
-              const SizedBox(height: 12),
-              if (summary.accounts.isEmpty)
-                const _PlainEmpty(
-                  'No accounts yet',
-                  'Add an account to start tracking your balance.',
-                )
-              else
-                ...summary.accounts.map(
-                  (account) =>
-                      _AccountRow(account: account, currency: currency),
+      final services = widget.services;
+
+      return Scaffold(
+        body: RefreshIndicator(
+          onRefresh: controller.load,
+          child: CustomScrollView(
+            slivers: [
+              const SliverAppBar.medium(title: Text('Overview')),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(
+                  SpaceSize.gutter,
+                  0,
+                  SpaceSize.gutter,
+                  SpaceSize.fabClearance,
                 ),
-              const SizedBox(height: 28),
-              _SectionHeading(
-                title: 'Recent activity',
-                caption: 'See all',
-                onTap: widget.onShowHistory,
-              ),
-              const SizedBox(height: 10),
-              if (controller.recentActivity.isEmpty)
-                const _PlainEmpty(
-                  'No activity yet',
-                  'Transactions and transfers will appear here.',
-                )
-              else
-                ...controller.recentActivity.map(
-                  (item) => _ActivityRow(
-                    item: item,
-                    currency: currency,
-                    onTap: item.transaction == null
-                        ? null
-                        : () => _open(
-                            TransactionScreen(
-                              services: widget.services,
-                              existing: item.transaction,
+                sliver: SliverList.list(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(
+                        left: SpaceSize.extraSmall,
+                        bottom: SpaceSize.large,
+                      ),
+                      child: Text(
+                        formatLongDate(DateTime.now()),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    if (controller.busy && summary == null)
+                      const Padding(
+                        padding: EdgeInsets.all(SpaceSize.huge),
+                        child: Center(child: CircularProgressIndicator()),
+                      ),
+                    ErrorBanner(controller.error),
+                    if (summary != null) ...[
+                      _BalanceCard(
+                        summary: summary,
+                        currency: currency,
+                        onTap: () => _open(AccountScreen(services: services)),
+                      ),
+                      if (controller.recentActivity.isEmpty) ...[
+                        const SizedBox(height: SpaceSize.medium),
+                        _WelcomeCard(
+                          onStart: () => openAddFlow(context, services),
+                        ),
+                      ],
+                      const SectionHeader('This month'),
+                      _MonthFlow(summary: summary, currency: currency),
+                      const SectionHeader('Money owed'),
+                      _OweSummary(
+                        summary: summary,
+                        currency: currency,
+                        onTap: () => _open(OweScreen(services: services)),
+                      ),
+                      SectionHeader(
+                        'Accounts',
+                        actionLabel: 'Manage',
+                        onAction: () =>
+                            _open(AccountScreen(services: services)),
+                      ),
+                      _AccountsCard(summary: summary, currency: currency),
+                      SectionHeader(
+                        'Recent activity',
+                        actionLabel: 'See all',
+                        onAction: widget.onShowHistory,
+                      ),
+                      if (controller.recentActivity.isEmpty)
+                        const Card(
+                          child: EmptyState(
+                            icon: Icons.receipt_long_outlined,
+                            title: 'No activity yet',
+                            message: 'Your latest expenses, income and transfers will show here.',
+                          ),
+                        )
+                      else
+                        GroupedCard(
+                          children: [
+                            for (final item in controller.recentActivity)
+                              ActivityTile(
+                                item: item,
+                                currency: currency,
+                                onTap: item.transaction == null
+                                    ? null
+                                    : () => _open(
+                                        TransactionScreen(
+                                          services: services,
+                                          existing: item.transaction,
+                                        ),
+                                      ),
+                              ),
+                          ],
+                        ),
+                      const SectionHeader('Assets and tax'),
+                      GroupedCard(
+                        children: [
+                          AppTile(
+                            leading: const IconBadge(
+                              Icons.inventory_2_outlined,
+                            ),
+                            title: 'Assets',
+                            subtitle: 'Current value of things you own',
+                            trailing: AmountText(
+                              summary.assetValueMinor,
+                              currency: currency,
+                            ),
+                            onTap: () => _open(AssetScreen(services: services)),
+                          ),
+                          AppTile(
+                            leading: const IconBadge(
+                              Icons.account_balance_outlined,
+                            ),
+                            title: 'Tax paid',
+                            subtitle: 'This month',
+                            trailing: AmountText(
+                              summary.taxPaidMinor,
+                              currency: currency,
                             ),
                           ),
-                  ),
+                        ],
+                      ),
+                    ],
+                  ],
                 ),
+              ),
             ],
-          ],
+          ),
         ),
       );
     },
   );
 }
 
-String _month(int month) => const [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-][month - 1];
-
-TextStyle _eyebrow(BuildContext context) => TextStyle(
-  color: Theme.of(context).colorScheme.onSurfaceVariant,
-  fontSize: 10,
-  fontWeight: FontWeight.w800,
-  letterSpacing: 1.5,
-);
-
-class _BalanceHero extends StatelessWidget {
-  const _BalanceHero({required this.summary, required this.currency});
+/// The single high-emphasis surface on the screen.
+class _BalanceCard extends StatelessWidget {
+  const _BalanceCard({
+    required this.summary,
+    required this.currency,
+    required this.onTap,
+  });
   final DashboardSummary summary;
   final String currency;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final net =
         summary.incomeMinor - summary.expenseMinor - summary.taxPaidMinor;
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: colors.primary,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: colors.primary.withValues(alpha: .18),
-            blurRadius: 24,
-            offset: const Offset(0, 12),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    // In dark mode a bright card glares; use the deep brand container instead.
+    final dark = theme.brightness == Brightness.dark;
+    final background = dark ? scheme.primaryContainer : scheme.primary;
+    final foreground = dark ? scheme.onPrimaryContainer : scheme.onPrimary;
+    final onPrimaryMuted = foreground.withValues(alpha: .78);
+    final count = summary.accounts.where((a) => !a.account.isArchived).length;
+
+    return Material(
+      color: background,
+      borderRadius: BorderRadius.circular(RadiusSize.extraLarge),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(CardSize.heroPadding),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(
-                Icons.account_balance_wallet_outlined,
-                color: colors.onPrimary.withValues(alpha: .8),
-                size: 18,
-              ),
-              const SizedBox(width: 8),
               Text(
-                'TOTAL IN ACCOUNTS',
-                style: TextStyle(
-                  color: colors.onPrimary.withValues(alpha: .8),
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1,
+                'Total balance',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: onPrimaryMuted,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(
-              money(summary.totalBalanceMinor, currency),
-              style: TextStyle(
-                color: colors.onPrimary,
-                fontSize: 34,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -.8,
-              ),
-            ),
-          ),
-          const SizedBox(height: 22),
-          Divider(color: colors.onPrimary.withValues(alpha: .22), height: 1),
-          const SizedBox(height: 17),
-          Row(
-            children: [
-              Expanded(
+              const SizedBox(height: SpaceSize.extraSmall),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
                 child: Text(
-                  'NET THIS MONTH',
-                  style: TextStyle(
-                    color: colors.onPrimary.withValues(alpha: .8),
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1,
+                  money(summary.totalBalanceMinor, currency),
+                  maxLines: 1,
+                  style: theme.textTheme.displaySmall?.copyWith(
+                    color: foreground,
+                    fontFeatures: const [FontFeature.tabularFigures()],
                   ),
                 ),
               ),
+              const SizedBox(height: SpaceSize.extraSmall),
               Text(
-                money(net, currency),
-                style: TextStyle(
-                  color: colors.onPrimary,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
+                'Across $count ${count == 1 ? 'account' : 'accounts'}',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: onPrimaryMuted,
+                ),
+              ),
+              const SizedBox(height: SpaceSize.large),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: SpaceSize.medium,
+                  vertical: SpaceSize.small,
+                ),
+                decoration: BoxDecoration(
+                  color: foreground.withValues(alpha: .14),
+                  borderRadius: BorderRadius.circular(RadiusSize.small),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      net >= 0
+                          ? Icons.trending_up_rounded
+                          : Icons.trending_down_rounded,
+                      size: IconSize.small,
+                      color: foreground,
+                    ),
+                    const SizedBox(width: SpaceSize.small),
+                    Flexible(
+                      child: Text(
+                        '${money(net, currency, signed: true)} this month',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          color: foreground,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-        ],
+        ),
       ),
     );
   }
 }
 
-class _SectionHeading extends StatelessWidget {
-  const _SectionHeading({
-    required this.title,
-    required this.caption,
-    this.onTap,
-  });
-  final String title;
-  final String caption;
-  final VoidCallback? onTap;
+class _WelcomeCard extends StatelessWidget {
+  const _WelcomeCard({required this.onStart});
+  final VoidCallback onStart;
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(CardSize.padding),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Welcome to Money Tracker',
+              style: theme.textTheme.titleMedium,
+            ),
+            const SizedBox(height: SpaceSize.extraSmall),
+            Text(
+              'Start by recording something you spent or received today. '
+              'Your balance and reports update automatically.',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: SpaceSize.medium),
+            FilledButton.tonalIcon(
+              onPressed: onStart,
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(0, ComponentSize.minTouchTarget),
+              ),
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Add your first entry'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MonthFlow extends StatelessWidget {
+  const _MonthFlow({required this.summary, required this.currency});
+  final DashboardSummary summary;
+  final String currency;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     return Row(
       children: [
         Expanded(
-          child: Text(title, style: Theme.of(context).textTheme.titleLarge),
+          child: _StatCard(
+            icon: Icons.south_west_rounded,
+            label: 'Income',
+            amount: summary.incomeMinor,
+            currency: currency,
+            color: colors.income,
+            background: colors.incomeContainer,
+          ),
         ),
-        if (onTap == null)
-          Text(
-            caption,
-            style: TextStyle(color: colors.onSurfaceVariant, fontSize: 12),
-          )
-        else
-          TextButton(onPressed: onTap, child: Text(caption)),
+        const SizedBox(width: SpaceSize.medium),
+        Expanded(
+          child: _StatCard(
+            icon: Icons.north_east_rounded,
+            label: 'Spent',
+            amount: summary.expenseMinor,
+            currency: currency,
+            color: colors.expense,
+            background: colors.expenseContainer,
+          ),
+        ),
       ],
     );
   }
 }
 
-class _CashFlow extends StatelessWidget {
-  const _CashFlow({required this.summary, required this.currency});
-  final DashboardSummary summary;
-  final String currency;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final total = summary.incomeMinor + summary.expenseMinor;
-    final incomeShare = total == 0 ? 0 : summary.incomeMinor / total;
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: colors.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: colors.outlineVariant),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: _FlowValue(
-                  label: 'INCOME',
-                  amount: summary.incomeMinor,
-                  currency: currency,
-                  icon: Icons.south_west_rounded,
-                  color: colors.tertiary,
-                ),
-              ),
-              Container(height: 48, width: 1, color: colors.outlineVariant),
-              const SizedBox(width: 16),
-              Expanded(
-                child: _FlowValue(
-                  label: 'EXPENSES',
-                  amount: summary.expenseMinor,
-                  currency: currency,
-                  icon: Icons.north_east_rounded,
-                  color: colors.error,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          if (total > 0)
-            ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: Row(
-                children: [
-                  if (summary.incomeMinor > 0)
-                    Expanded(
-                      flex: (incomeShare * 100).round().clamp(1, 100),
-                      child: Container(height: 7, color: colors.tertiary),
-                    ),
-                  if (summary.expenseMinor > 0)
-                    Expanded(
-                      flex: (100 - (incomeShare * 100).round()).clamp(1, 100),
-                      child: Container(
-                        height: 7,
-                        color: colors.error.withValues(alpha: .7),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FlowValue extends StatelessWidget {
-  const _FlowValue({
+class _StatCard extends StatelessWidget {
+  const _StatCard({
+    required this.icon,
     required this.label,
     required this.amount,
     required this.currency,
-    required this.icon,
     required this.color,
-  });
-  final String label;
-  final int amount;
-  final String currency;
-  final IconData icon;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Row(
-        children: [
-          Icon(icon, size: 16, color: color),
-          const SizedBox(width: 5),
-          Text(label, style: _eyebrow(context)),
-        ],
-      ),
-      const SizedBox(height: 8),
-      FittedBox(
-        fit: BoxFit.scaleDown,
-        alignment: Alignment.centerLeft,
-        child: Text(
-          money(amount, currency),
-          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
-        ),
-      ),
-    ],
-  );
-}
-
-class _PositionList extends StatelessWidget {
-  const _PositionList({
-    required this.summary,
-    required this.currency,
-    required this.onOwe,
-    required this.onAssets,
-  });
-  final DashboardSummary summary;
-  final String currency;
-  final VoidCallback onOwe;
-  final VoidCallback onAssets;
-
-  @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      _MetricRow(
-        icon: Icons.call_received_rounded,
-        label: 'Owed to you',
-        value: money(summary.oweInMinor, currency),
-        onTap: onOwe,
-      ),
-      _MetricRow(
-        icon: Icons.call_made_rounded,
-        label: 'You owe',
-        value: money(summary.oweOutMinor, currency),
-        onTap: onOwe,
-      ),
-      _MetricRow(
-        icon: Icons.inventory_2_outlined,
-        label: 'Assets',
-        value: money(summary.assetValueMinor, currency),
-        onTap: onAssets,
-      ),
-      _MetricRow(
-        icon: Icons.receipt_long_outlined,
-        label: 'Tax paid this month',
-        value: money(summary.taxPaidMinor, currency),
-      ),
-    ],
-  );
-}
-
-class _MetricRow extends StatelessWidget {
-  const _MetricRow({
-    required this.icon,
-    required this.label,
-    required this.value,
+    required this.background,
     this.onTap,
   });
   final IconData icon;
   final String label;
-  final String value;
+  final int amount;
+  final String currency;
+  final Color color;
+  final Color background;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Column(
-      children: [
-        InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 13),
-            child: Row(
-              children: [
-                Icon(icon, size: 20, color: colors.primary),
-                const SizedBox(width: 13),
-                Expanded(
-                  child: Text(
-                    label,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
+    final theme = Theme.of(context);
+    return Card(
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(CardSize.padding),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  IconBadge(
+                    icon,
+                    size: 28,
+                    color: color,
+                    background: background,
                   ),
-                ),
-                Flexible(
-                  child: Text(
-                    value,
-                    textAlign: TextAlign.end,
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                ),
-                if (onTap != null) ...[
-                  const SizedBox(width: 5),
-                  Icon(
-                    Icons.chevron_right_rounded,
-                    size: 17,
-                    color: colors.onSurfaceVariant,
+                  const SizedBox(width: SpaceSize.small),
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
                   ),
                 ],
-              ],
-            ),
+              ),
+              const SizedBox(height: SpaceSize.medium),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: AmountText(
+                  amount,
+                  currency: currency,
+                  style: theme.textTheme.titleLarge,
+                ),
+              ),
+            ],
           ),
         ),
-        Divider(height: 1, color: colors.outlineVariant),
-      ],
-    );
-  }
-}
-
-class _AccountRow extends StatelessWidget {
-  const _AccountRow({required this.account, required this.currency});
-  final AccountOverview account;
-  final String currency;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 11),
-      child: Row(
-        children: [
-          CircleAvatar(
-            backgroundColor: colors.primaryContainer,
-            child: Icon(
-              Icons.account_balance_wallet_outlined,
-              size: 19,
-              color: colors.onPrimaryContainer,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  account.account.name,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-                Text(
-                  account.account.type.name,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: colors.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Text(
-            money(account.balanceMinor, currency),
-            style: const TextStyle(fontWeight: FontWeight.w700),
-          ),
-        ],
       ),
     );
   }
 }
 
-class _ActivityRow extends StatelessWidget {
-  const _ActivityRow({required this.item, required this.currency, this.onTap});
-  final ActivityItem item;
+class _OweSummary extends StatelessWidget {
+  const _OweSummary({
+    required this.summary,
+    required this.currency,
+    required this.onTap,
+  });
+  final DashboardSummary summary;
   final String currency;
-  final VoidCallback? onTap;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final icon = switch (item.kind) {
-      ActivityKind.transaction =>
-        item.amountMinor >= 0
-            ? Icons.south_west_rounded
-            : Icons.north_east_rounded,
-      ActivityKind.tax => Icons.receipt_long_outlined,
-      ActivityKind.transfer => Icons.swap_horiz_rounded,
-    };
-    final positive =
-        item.amountMinor > 0 &&
-        !item.isPending &&
-        item.kind != ActivityKind.transfer;
-    return Column(
+    final colors = AppColors.of(context);
+    return Row(
       children: [
-        InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  backgroundColor: colors.primary.withValues(alpha: .09),
-                  child: Icon(icon, color: colors.primary, size: 19),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        '${item.subtitle} · ${item.date.day}/${item.date.month}/${item.date.year}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: colors.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  money(item.amountMinor, currency),
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: positive ? colors.tertiary : colors.onSurface,
-                  ),
-                ),
-              ],
-            ),
+        Expanded(
+          child: _StatCard(
+            icon: Icons.call_received_rounded,
+            label: 'Owed to you',
+            amount: summary.oweInMinor,
+            currency: currency,
+            color: colors.warning,
+            background: colors.warningContainer,
+            onTap: onTap,
           ),
         ),
-        Divider(height: 1, color: colors.outlineVariant),
+        const SizedBox(width: SpaceSize.medium),
+        Expanded(
+          child: _StatCard(
+            icon: Icons.call_made_rounded,
+            label: 'You owe',
+            amount: summary.oweOutMinor,
+            currency: currency,
+            color: colors.warning,
+            background: colors.warningContainer,
+            onTap: onTap,
+          ),
+        ),
       ],
     );
   }
 }
 
-class _PlainEmpty extends StatelessWidget {
-  const _PlainEmpty(this.title, this.subtitle);
-  final String title;
-  final String subtitle;
+class _AccountsCard extends StatelessWidget {
+  const _AccountsCard({required this.summary, required this.currency});
+  final DashboardSummary summary;
+  final String currency;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 20),
-    child: Column(
-      children: [
-        Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-        const SizedBox(height: 4),
-        Text(
-          subtitle,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
+  Widget build(BuildContext context) {
+    final active = summary.accounts.where((a) => !a.account.isArchived);
+    if (active.isEmpty) {
+      return const Card(
+        child: EmptyState(
+          icon: Icons.account_balance_wallet_outlined,
+          title: 'No accounts',
+          message: 'Add a cash or bank account to start tracking.',
         ),
+      );
+    }
+    return GroupedCard(
+      children: [
+        for (final a in active)
+          AppTile(
+            leading: IconBadge(
+              a.account.type == AccountType.bank
+                  ? Icons.account_balance_outlined
+                  : Icons.payments_outlined,
+            ),
+            title: a.account.name,
+            subtitle: a.account.type == AccountType.bank ? 'Bank' : 'Cash',
+            trailing: AmountText(
+              a.balanceMinor,
+              currency: currency,
+              tone: a.balanceMinor < 0
+                  ? AmountTone.expense
+                  : AmountTone.neutral,
+            ),
+          ),
       ],
-    ),
-  );
+    );
+  }
 }

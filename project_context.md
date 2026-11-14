@@ -1,0 +1,363 @@
+# Money Tracker — Project Context (single source of truth)
+
+> **Purpose:** Full working context of this codebase so an AI/dev can act without re-reading source.
+> **Snapshot of:** commit `3caed13` on `main` + uncommitted full UI/UX redesign (2026-11-15): new design system, NavigationBar + single "Add" flow, rewritten screens, Reports by month/category, History search/filters.
+> **Maintenance rule:** Whenever code changes, update the matching section here in the same change. If this file and code disagree, code wins — fix this file.
+
+---
+
+## 1. What the app is
+
+Local-first, offline personal finance tracker (Flutter, Material 3, SQLite via `sqflite`). No network, no auth, no backend. Records:
+- **Income / Expense** transactions (always tied to an account)
+- **Owe In** ("owed to me") / **Owe Out** ("I owe") — pending until completed against an account
+- **Tax payments** (separate table, reduce an account balance)
+- **Transfers** between accounts
+- **Accounts** (cash / bank) with computed balances
+- **Assets** (things owned; purchase cost + current value; don't affect balances)
+- **Categories** (hierarchical, typed income/expense/both)
+- **Settings**: display currency (label only, no conversion) and theme mode
+
+Package name `money_tracker`, version `0.1.0+1`, Dart SDK `^3.13.3`. Android applicationId `com.example.money_tracker`. Platforms folders: `android/`, `linux/` (desktop sqflite not configured — tests use `sqflite_common_ffi`).
+
+### Dependencies (pubspec.yaml)
+- runtime: `flutter`, `json_annotation ^4.12.0`, `path ^1.9.1`, `sqflite ^2.4.4`
+- dev: `flutter_test`, `flutter_lints ^6.0.0`, `build_runner ^2.16.1`, `json_serializable ^6.14.1`, `sqflite_common_ffi ^2.4.3`
+- **No state-management package** (plain `ChangeNotifier` + `AnimatedBuilder`). **No router package** (`Navigator.push` + `MaterialPageRoute`). No intl package (dates/money formatted by hand).
+
+### Commands
+```sh
+flutter pub get
+dart run build_runner build     # regenerate *.g.dart after model changes
+flutter analyze                 # analysis_options: flutter_lints; excludes build/, android/, linux/
+flutter test
+```
+
+---
+
+## 2. Architecture (layers & data flow)
+
+```
+main.dart
+  └─ MoneyTrackerApp (AnimatedBuilder on AppServices → MaterialApp themeMode)
+       └─ SplashScreen → (services.initialize()) → pushReplacement AppShell
+
+Screen (StatefulWidget)  ──owns──▶  Controller (BaseController : ChangeNotifier)
+   │ AnimatedBuilder(controller)          │ calls
+   ▼                                      ▼
+ widgets/app_widgets.dart        AppServices (ChangeNotifier, DI container)
+                                          │ holds
+                         ┌────────────────┼──────────────────────┐
+                    Repositories (CrudRepository<T>)      Services (Dashboard, Activity, Settings)
+                         └────────────────┬──────────────────────┘
+                                   LocalDatabase (single sqflite connection, schema v3)
+```
+
+**Refresh mechanism (important):**
+- `AppServices` is a `ChangeNotifier`. Every `BaseController` constructor does `services.addListener(refresh)`.
+- After any write, controllers call `services.changed()` → `notifyListeners()` → **every live controller re-runs `refresh()`** (reloads its data from DB). Also `MoneyTrackerApp` rebuilds (theme).
+- So cross-screen sync is automatic; no manual invalidation needed. Controllers remove the listener in `dispose()`.
+
+**Error mechanism:** `BaseController.run(action)` sets `busy=true`, `error=null`, notifies; catches any exception and maps it into `error`:
+- contains `FOREIGN KEY constraint failed` → "This item is in use and cannot be deleted."
+- contains `UNIQUE constraint failed` → "This record is already linked to another item."
+- otherwise `e.toString()` with `"Invalid argument(s): "` stripped (so `ArgumentError('X')` shows "X").
+- returns `null` on error. Write methods use the pattern `await run(() async {...; return true;}) == true` → `Future<bool>` success flag. Screens pop the sheet/page only when it returns `true`.
+- `_disposed` guard avoids notifying after dispose.
+
+**Money:** all amounts are `int` **minor units** (×100). Parsing: `MoneyAmount.parse`. Formatting: `money(minor, currency, {signed})` in `lib/app/formatters.dart` → `Rs 12,345.50`, `$1,200.00`, `−Rs 5.00`, signed `+£25.00`. Symbols: PKR→`Rs`, USD→`$`, EUR→`€`, GBP→`£` (multi-letter symbols get a space). `amountInputText(minor)` → editable text (`1200`, `1250.5`).
+
+**Dates:** stored as `DateTime.toIso8601String()` (local time, no TZ) TEXT columns; range queries compare ISO strings lexicographically. UI formats via `formatters.dart`: `formatDate` (`15 Nov 2026`), `formatMonthYear` (`November 2026`), `formatLongDate` (`Sunday, 15 November`), `relativeDay` (`Today`/`Yesterday`/`Tomorrow`/`Tue, 10 Nov`/`2 Mar 2025`), `dateOnly`.
+
+---
+
+## 3. File map
+
+```
+lib/
+  main.dart                         App entry; MoneyTrackerApp
+  app/
+    app_services.dart               DI container + global app state (currency, themeMode)
+    app_sizes.dart                  Design tokens on 4dp grid (TextSize, CardSize, IconSize, RadiusSize, SpaceSize, ComponentSize)
+    app_theme.dart                  Light/dark ThemeData + AppColors ThemeExtension (income/expense/transfer/warning)
+    formatters.dart                 money(), amountInputText(), currency symbols/names, date formatters
+    controllers/
+      base_controller.dart          BaseController (run/error/busy/listener plumbing, clearError)
+      money_amount.dart             MoneyAmount.parse (string → minor int)
+      category_path.dart            categoryPath(): "Parent / Child / Leaf"
+      splash_controller.dart        App init state
+      home_controller.dart          Dashboard summary + 5 recent activity
+      history_controller.dart       Full activity list + ActivityFilter + search query
+      reports_controller.dart       Selected month, summary, category totals, prev/next month
+      transaction_controller.dart   Add/edit/delete transaction & add tax (EntryKind, initialKind)
+      transfer_controller.dart      Create transfer (+balances, swap)
+      account_controller.dart       Account CRUD + balances
+      asset_controller.dart         Asset CRUD
+      category_controller.dart      Category CRUD
+      owe_controller.dart           Pending owes (split owedToMe/iOwe + totals) + complete
+      settings_controller.dart      Currency + theme
+    screens/
+      splash_screen.dart            Brand mark, init, retry; fades to AppShell
+      app_shell.dart                NavigationBar (4 tabs, IndexedStack) + "Add" FAB on Home/History
+      add_entry_sheet.dart          openAddFlow(): "What would you like to add?" menu → form → "Saved" snackbar
+      home_screen.dart              Dashboard ("Overview")
+      history_screen.dart           Day-grouped activity, search, filter chips
+      reports_screen.dart           Month switcher, net summary, category breakdowns, position/net worth
+      settings_screen.dart          Preferences + Manage hub + About
+      transaction_screen.dart       Transaction/tax form (big amount, form rows, pinned Save)
+      transfer_screen.dart          Transfer form (From/To + swap)
+      account_screen.dart           Accounts (active/archived) + editor sheet
+      asset_screen.dart             Assets + editor sheet
+      category_screen.dart          Category tree by type + editor sheet
+      owe_screen.dart               Money owed sections + settle sheet
+    widgets/
+      app_widgets.dart              Design-system components (exports formatters.dart + category_icons.dart)
+      category_icons.dart           categoryIcon(name, {income}) keyword → Material icon
+  data/
+    models/                         Immutable entities (@JsonSerializable, copyWith) + *.g.dart (generated)
+      model_types.dart              Enums + `omitted` sentinel
+      account.dart, account_transfer.dart, asset.dart, category.dart, money_transaction.dart, tax_payment.dart
+    repo/
+      crud_repository.dart          Generic CRUD base
+      account_repository.dart, asset_repository.dart, category_repository.dart,
+      tax_repository.dart, transaction_repository.dart, transfer_repository.dart
+    services/
+      local_database.dart           Connection, schema, migrations, seeding
+      dashboard_service.dart        DashboardSummary for current month
+      activity_service.dart         Merged activity feed (transactions + tax + transfers)
+      settings_service.dart         app_settings key/value
+test/
+  data_layer_test.dart              Repo/service tests (in-memory FFI DB)
+  app_smoke_test.dart               Widget tests (shell/add menu/tabs, end-to-end expense, theme switching)
+  formatters_test.dart              money/date formatter unit tests
+README.md                           Product/UI plan + data rules (human doc)
+ui_ux.json                          Editable UI spec v2 (NOT loaded at runtime) — principles, tokens, nav, components, screens
+```
+
+---
+
+## 4. Data layer
+
+### 4.1 Enums (`lib/data/models/model_types.dart`)
+```dart
+enum CategoryType { income, expense, both }
+enum AccountType { cash, bank }               // 'microfinance' was removed (commit 165f2cf)
+enum TransactionType { income, expense, oweIn, oweOut }
+enum OweStatus { pending, completed }
+const omitted = Object();                     // copyWith sentinel: lets you pass null explicitly to clear nullable fields
+```
+Enums are stored in DB by `.name` and read with `values.byName`.
+
+### 4.2 Models (`lib/data/models/*.dart`)
+All immutable, `const` constructors, `id` is `int?` (null = not yet saved), `copyWith` where nullable fields use `Object? x = omitted`. `fromJson/toJson` are generated (`*.g.dart`) but **repositories do NOT use them** — repos map rows manually with snake_case columns. JSON is effectively unused at runtime.
+
+| Model | Fields |
+|---|---|
+| `Account` | id, name, type: AccountType, openingBalanceMinor (default 0, may be negative), isArchived (default false) |
+| `Category` | id, name, type: CategoryType, parentId? |
+| `MoneyTransaction` | id, type: TransactionType, amountMinor, categoryId, accountId?, occurredAt, note?, party?, dueAt?, oweStatus?, completedAt? |
+| `TaxPayment` | id, amountMinor, paidAt, accountId, note? |
+| `AccountTransfer` | id, fromAccountId, toAccountId, amountMinor, occurredAt, note? |
+| `Asset` | id, name, acquiredOn, purchaseAmountMinor, currentValueMinor, purchaseTransactionId?, notes? |
+
+### 4.3 SQLite schema (`lib/data/services/local_database.dart`)
+- DB file: `<getDatabasesPath()>/money_tracker.db` (or `path` ctor arg; tests use `inMemoryDatabasePath`). `LocalDatabase({DatabaseFactory? factory, String? path})`.
+- **Version 3.** `onConfigure`: `PRAGMA foreign_keys = ON`. Connection opened lazily via `await storage.database` and cached.
+- All FKs are `ON DELETE RESTRICT` (deleting a referenced row fails → "This item is in use…").
+
+| Table | Columns / constraints |
+|---|---|
+| `categories` | id PK AI, name NOT NULL (trimmed non-empty), type CHECK income/expense/both, parent_id → categories. Index `categories_parent_idx`. |
+| `accounts` | id, name (non-empty), type CHECK cash/bank, opening_balance_minor INT default 0, is_archived 0/1 |
+| `transactions` | id, type CHECK income/expense/oweIn/oweOut, amount_minor > 0, category_id NOT NULL → categories, account_id → accounts (nullable), occurred_at TEXT, note, party, due_at, owe_status CHECK pending/completed, completed_at. **Table CHECK:** income/expense ⇒ account_id NOT NULL and owe_status/due_at/completed_at NULL; oweIn/oweOut ⇒ owe_status NOT NULL and (pending ⇒ completed_at NULL; completed ⇒ completed_at & account_id NOT NULL). Indexes on occurred_at, category_id, account_id, (owe_status, due_at). |
+| `assets` | id, name (non-empty), acquired_on, purchase_amount_minor ≥0, current_value_minor ≥0, purchase_transaction_id UNIQUE → transactions, notes |
+| `tax_payments` | id, amount_minor > 0, paid_at, account_id NOT NULL → accounts, note. Index on paid_at. |
+| `transfers` (added v2) | id, from_account_id, to_account_id (→ accounts, NOT NULL), amount_minor > 0, occurred_at, note, CHECK from ≠ to. Index on occurred_at. |
+| `app_settings` (added v2) | key TEXT PK, value TEXT. Seeded `currency=PKR`. `theme_mode` row inserted on first set. |
+
+**Migrations (`_upgradeSchema`):** `<2` → create transfers + app_settings; `<3` → `_seedDefaults`.
+**Seeding (`_seedDefaults`, on create and v3 upgrade), idempotent via `INSERT … WHERE NOT EXISTS` (case-insensitive name, root level):**
+- income categories: Salary, Business, Bonus
+- expense categories: Food, Shopping, Phone, Donation, Gifts, Education
+- account: `Cash` (cash, opening 0)
+These are normal editable/deletable rows.
+
+**Adding a migration:** bump `version`, add `if (oldVersion < N)` block in `_upgradeSchema`, and make `_createSchema` produce the same final shape; add a test like "version 2 upgrade adds only missing defaults".
+
+### 4.4 Repositories (`lib/data/repo/`)
+`CrudRepository<T>(LocalDatabase storage)` — subclasses implement `table`, `fromRow`, `toRow`, `withId`, optional `validate(value, {updatingId})`.
+- `create(v)`: throws if id ≠ null; `validate`; insert; returns copy with id.
+- `getById(id)` → `T?`; `getAll()` ordered `id DESC` (newest first).
+- `update(v)`: requires id; `validate(updatingId:)`; throws `StateError` if 0 rows.
+- `delete(id)`: throws `StateError` if 0 rows. (FK violations throw from sqflite.)
+- `toRow` trims `name` for accounts/categories/assets.
+
+| Repo | Table | Validation | Extra methods |
+|---|---|---|---|
+| `AccountRepository` | accounts | name non-empty | `balanceMinor(accountId)` (see §5.1) |
+| `CategoryRepository` | categories | name non-empty; parent must exist; on update: no cycle (walks parent chain), and new type must stay compatible with existing transactions' directions | `childrenOf(int? parentId)` (sorted name NOCASE; currently unused by UI) |
+| `TransactionRepository` | transactions | amount > 0; category exists & direction-compatible (income/oweIn need income|both; expense/oweOut need expense|both); income/expense need account & no owe fields; owe needs status; pending ⇒ no completedAt; completed ⇒ completedAt + account | `completeOwe(id, accountId, {at})` (only pending → completed, sets account & completedAt=now), `pendingOwes({through})` (ordered due_at nulls last; `through` = due before date), `history({limit})` (occurred_at DESC, id DESC). Internally owns its own `CategoryRepository`. |
+| `TaxRepository` | tax_payments | amount > 0 | `paidInMonth(year, month)`, `history({limit})` |
+| `TransferRepository` | transfers | amount > 0; from ≠ to | `history({limit})` |
+| `AssetRepository` | assets | name non-empty; values ≥ 0; if purchaseTransactionId set it must reference an **expense** transaction | — |
+
+Note: repos and services each construct their own repository instances over the shared `LocalDatabase` (cheap; same connection).
+
+### 4.5 Services (`lib/data/services/`)
+- **`DashboardService.currentMonth({now})` → `DashboardSummary`**
+  - `incomeMinor`/`expenseMinor`: sum of `income`/`expense` transactions with `occurred_at` in current calendar month.
+  - `oweInMinor`/`oweOutMinor`: sum of **all pending** owes (not month-limited).
+  - `taxPaidMinor`: tax with `paid_at` in current month.
+  - `assetValueMinor`: sum of all `current_value_minor`.
+  - `accounts`: `List<AccountOverview(account, balanceMinor)>` for **all** accounts (incl. archived), one balance query per account.
+  - getter `totalBalanceMinor` = sum of account balances.
+- **`DashboardService.categoryTotals(DateTime month)` → `List<CategoryTotal{categoryId, name, isIncome, totalMinor}>`** — income/expense (not owes) grouped by category+type for that calendar month, `ORDER BY total DESC`. Used by Reports.
+- `DashboardService.currentMonth(now: someMonth)` also works for past months (Reports passes the selected month).
+- **`ActivityService.history({limit})` → `List<ActivityItem>`** — merges transactions, taxes, transfers; sorted by date DESC; `limit` applied per source then to merged list.
+  - `ActivityItem { title, subtitle, amountMinor (signed), date, kind: ActivityKind{transaction,tax,transfer}, isPending, transaction? }`
+  - Transaction: title = category name; subtitle Income / Expense / "Owed to you" / "Received owe" / "You owe" / "Repaid owe"; amount + for income/oweIn, − for expense/oweOut; `isPending` if owe pending; `transaction` set (makes it tappable/editable).
+  - Tax: title "Tax payment", subtitle note or "Paid tax", amount negative.
+  - Transfer: title "Transfer", subtitle "FromName → ToName", amount positive (shown neutral color).
+- **`SettingsService`**: `currency()` (default PKR), `setCurrency(code)` allowed `PKR, USD, EUR, GBP` (uses UPDATE on seeded row), `themeMode()` returns `light|dark|system` (default `system`), `setThemeMode(mode)` (INSERT OR REPLACE).
+
+---
+
+## 5. Business rules
+
+### 5.1 Account balance (`AccountRepository.balanceMinor`)
+```
+balance = opening_balance_minor
+        + Σ transactions on account where (type in income/expense OR owe_status='completed')
+              (+amount for income/oweIn, −amount for expense/oweOut)
+        − Σ tax_payments on account
+        + Σ transfers (+ if to_account, − if from_account)
+```
+Pending owes never affect balances. Assets never affect balances (link to a purchase expense instead to avoid double-debit).
+
+### 5.2 Other rules
+- Category direction must match transaction direction (enforced in repo validation + DB has no check for this; UI filters via `availableCategories`).
+- Changing a category's type is blocked if existing transactions would conflict.
+- Category hierarchy: any depth, no cycles; delete of a parent with children or a category with transactions fails (FK RESTRICT).
+- Archived accounts: still shown in Accounts list & dashboard totals, but excluded from account pickers (transaction, transfer, owe-complete).
+- Currency setting changes the label only; stored amounts are not converted.
+- Dashboard "Net this month" (Home & Reports) = income − expense − tax (month).
+
+---
+
+## 6. App layer
+
+### 6.1 `AppServices` (`lib/app/app_services.dart`)
+`ChangeNotifier` holding: `database`, `categories`, `accounts`, `assets`, `transactions`, `transfers`, `taxes` (repos), `dashboard`, `activity`, `settings` (services); mutable `currencyCode='PKR'`, `themeMode=ThemeMode.system`.
+- `AppServices.create()` (real DB) / `AppServices.withDatabase(LocalDatabase)` (tests).
+- `initialize()`: opens DB, loads currency + theme, notifies.
+- `setThemeMode(mode)`: persists + notifies (MaterialApp rebuilds).
+- `changed()`: notify all listeners (triggers all controllers' `refresh`).
+- `close()`: closes DB.
+
+### 6.2 Controllers (`lib/app/controllers/`)
+All (except Splash) extend `BaseController` and call `refresh()` in constructor. `BaseController.clearError()` is called before opening editor sheets.
+
+| Controller | State | Methods |
+|---|---|---|
+| `SplashController` (plain ChangeNotifier) | ready, error | `initialize()` → `services.initialize()` |
+| `HomeController` | `summary: DashboardSummary?`, `recentActivity` (5) | `load()` (pull-to-refresh) |
+| `HistoryController` | `items`, `filter: ActivityFilter{all, expense, income, transfer, owe, tax}`, `query` | `setFilter`, `setQuery`, getter `visibleItems` (filter + case-insensitive search over title/subtitle/note/party) |
+| `ReportsController(services, {now})` | `month` (1st of month), `summary`, `totals: List<CategoryTotal>` | `previousMonth()`, `nextMonth()` (blocked past current), getters `isCurrentMonth`, `spending`, `earning` |
+| `TransactionController(services, {existing, initialKind = expense})` | `kind`, amountText, categoryId, accountId, occurredAt (now), dueAt, note, party, accounts (non-archived), `balances`, categories, `editing` | setters, `save()`, `remove()`; getters `isOwe`, `isTax`, `isIncome`, `availableCategories`, `pathFor()`, `selectedCategory`, `selectedAccount`. Auto-selects the only account on new entries. |
+| `TransferController` | accounts (non-archived), `balances`, from/to ids, amountText, note, occurredAt | setters, `swap()`, `save()` |
+| `AccountController` | items, `balances: Map<int,int>` | `save({id,name,type,openingBalance(String),isArchived})`, `remove(id)` |
+| `AssetController` | items | `save({...})`, `remove(id)` |
+| `CategoryController` | items | `save({id,name,type,parentId})`, `remove(id)`, `pathFor()` |
+| `OweController` | items (pending owes), accounts | `complete(id, accountId)`; getters `owedToMe`, `iOwe`, `owedToMeMinor`, `iOweMinor` |
+| `SettingsController` | currency, themeMode | `setCurrency(v)` (also sets `services.currencyCode` + `changed()`), `setThemeMode(v)` |
+
+**`EntryKind { income, expense, oweIn, oweOut, tax }`** (in transaction_controller.dart). `tax` is UI-only and saves to `TaxRepository`.
+
+**`TransactionController.save()`:** parse amount (>0) → tax: require account → `taxes.create` (create only) | else require category, account unless owe → build `MoneyTransaction(type: byName(kind.name))`; owe keeps `editing?.oweStatus ?? pending` + `completedAt`, sets dueAt/party → create/update → `services.changed()`. `setKind` clears incompatible category and dueAt if not owe. When editing, kind can't change (chips hidden).
+
+**`MoneyAmount.parse(input, {allowZero, allowNegative})`**: regex `^-?\d+(\.\d{1,2})?$` → minor int. Accounts allow zero/negative opening; assets allow zero. `AmountField` input formatter only allows `^\d*\.?\d{0,2}`.
+
+### 6.3 Design language (UI/UX redesign, 2026-11-15)
+Based on Material 3 + Apple HIG patterns used by Google Wallet/Pay and iOS Settings:
+- **Inset grouped lists** (`GroupedCard`) for related rows; hairline dividers inset to text (`ComponentSize.tileDividerIndent` 68).
+- **One high-emphasis surface per screen** (Home balance card = primary; dark mode uses `primaryContainer`). Everything else neutral white/dark cards with 1px `outlineVariant` border, radius 16, no elevation/gradients.
+- **Semantic color only:** `AppColors` income (green), expense (red: overdue/negative/errors), warning (amber: owes), transfer (blue). Expense amounts display in neutral text, income in green with `+`.
+- **Plain language** for non-technical users: "Someone owes me", "I owe someone", "Starting balance", "Worth today", "Mark as received/paid".
+- **Frequency-based prominence:** Add menu gives Expense/Income big cards; rarer actions in a list.
+- **Big amount entry first** (Google Pay style), then tappable `FormRow`s that open `showPickerSheet` bottom sheets; primary button pinned via `BottomActionBar` (rises with keyboard).
+- **Large collapsing titles** (`SliverAppBar.medium`) on tab roots; standard `AppBar` on pushed pages; every pushed page has a Scaffold/AppBar/back.
+- Type scale ≥12sp (body 14/16), tabular figures for amounts, 48dp touch targets, 52dp buttons.
+- Feedback: `EmptyState` with action, `ErrorBanner`, `InfoNote` helper text, `showMessage` snackbar ("Saved"), `confirmDelete` dialog with red Delete.
+
+### 6.4 Screens & navigation (`lib/app/screens/`)
+Flow: `main` → `SplashScreen` (brand mark, spinner; friendly error + "Try again") → fade `pushReplacement(AppShell)`.
+
+**`AppShell`** — `Scaffold(body: IndexedStack[Home, History, Reports, Settings], bottomNavigationBar: NavigationBar (top hairline border), floatingActionButton: FAB.extended "+ Add" (tooltip 'Add') only on Home & History)`. Tabs keep state. Home's `onShowHistory` switches to tab 1.
+
+**`openAddFlow(context, services)`** (`add_entry_sheet.dart`) — modal sheet "What would you like to add?" → `_AddChoice{expense, income, transfer, oweIn, oweOut, tax}` → pushes `TransactionScreen(initialKind:)` or `TransferScreen` → on `pop(true)` shows "Saved" snackbar. Used by shell FAB, Home welcome card, Owe screen FAB.
+
+| Screen | Opened from | Layout (top → bottom) |
+|---|---|---|
+| `HomeScreen({services, onShowHistory})` | Tab 0 | RefreshIndicator + CustomScrollView: `SliverAppBar.medium('Overview')`, long date, `_BalanceCard` (Total balance, "Across N accounts", net-this-month pill; tap → Accounts), `_WelcomeCard` (only when no activity), "This month" `_MonthFlow` (Income/Spent `_StatCard`s), "Money owed" `_OweSummary` (→ OweScreen), "Accounts" + Manage (→ AccountScreen) `_AccountsCard` (non-archived), "Recent activity" + See all (→ History tab) `ActivityTile`s (transactions tap → edit), "Assets and tax" (Assets → AssetScreen, Tax paid this month). |
+| `HistoryScreen` | Tab 1 | `SliverAppBar.medium('History')`, search TextField, filter ChoiceChips (All/Expenses/Income/Transfers/Owed/Tax), day groups: `_DayHeader` (relativeDay + day net of non-transfer, non-pending) + GroupedCard of `ActivityTile(showDate:false)`. Empty / no-match states. Only transactions tappable (→ TransactionScreen edit). |
+| `ReportsScreen` | Tab 2 | `ReportsController`. `_MonthSwitcher` (‹ Month Year ›, next disabled at current), `_MonthSummary` (Net for the month signed/colored, income vs outflow bar, Income/Expenses/Tax rows), "Spending by category" `_Breakdown` (icon, name, amount, progress bar, %), "Income by category", "Where you stand today" `_Position` (balances, owed to you, you owe (negative), assets, Net worth = balances + oweIn − oweOut + assets). |
+| `SettingsScreen({services})` | Tab 3 | `SliverAppBar.medium('Settings')`: Preferences (Currency tile → picker of `currencyNames`; Appearance `SegmentedButton<ThemeMode>` System/Light/Dark), InfoNote about no conversion, Manage (Accounts, Categories, Money owed, Assets → push), About (privacy, Version 0.1.0). |
+| `TransactionScreen({services, existing, initialKind})` | Add menu, activity taps, Owe "Edit details" | AppBar title by kind ("Add expense", "Someone owes me", "Edit income"…), delete icon when editing. Body: kind `ChoiceChip`s (new only), `AmountField` (income green, else neutral), GroupedCard[Category (picker w/ icons + "Manage categories" footer → CategoryScreen), Account (picker w/ balances; optional+clearable for owes), Date, Due date (owes, clearable)], GroupedCard[Person (owes), Note], InfoNote for owes/tax, ErrorBanner. `bottomNavigationBar: BottomActionBar(Save)`. |
+| `TransferScreen` | Add menu | `AmountField` (blue), GroupedCard[From, To] with centered `IconButton.filledTonal` swap, GroupedCard[Date, Note], InfoNote, pinned "Transfer". |
+| `AccountScreen` | Settings › Accounts, Home | AppBar + FAB "Add account". Total-in-active card, "Active" and "Archived" groups. Tap → `SheetScaffold` editor: Account name, Cash/Bank `SegmentedButton`, Starting balance (symbol prefix, helper), Archive switch (edit), Save, "Delete account" (confirm). |
+| `AssetScreen` | Settings › Assets, Home | AppBar + FAB "Add asset". Total value card, list with paid/date subtitle and gain/loss. Sheet: Name, Price paid / Worth today (row), Bought on, Notes, InfoNote, Save, Delete. Blank "worth today" = price paid. |
+| `CategoryScreen` | Settings › Categories, category picker footer | AppBar + FAB "Add category". Sections Expenses / Income / Used for both; tree order by path, indented 24dp per depth. Sheet: Name, Used for segmented, "Inside" FormRow → picker (Top level = -1 sentinel), Save, Delete. |
+| `OweScreen` | Settings › Money owed, Home owe cards | AppBar + FAB "Add" (openAddFlow). InfoNote, sections "Owed to you"/"You owe" with total in header; rows: party name, due/overdue (red "Overdue since …"). Tap → sheet "Mark as received/paid" with account radio list (preselects existing/only account), primary action, "Edit details" (→ TransactionScreen). |
+
+### 6.5 Shared components (`lib/app/widgets/app_widgets.dart`)
+Exports `formatters.dart` and `category_icons.dart`.
+- Layout: `SectionHeader(title, {actionLabel, onAction, padding})`, `GroupedCard({children, dividerIndent})`, `IconBadge(icon, {color, background, size})`, `AppTile({title, subtitle, leading, trailing, onTap, showChevron, subtitleColor})`.
+- Forms: `FormRow({icon, label, value, placeholder='Choose', onTap, onClear})`, `FormTextRow({icon, hint, value, onChanged, maxLines, capitalization})`, `AppTextField({label, value, onChanged, hint, helper, keyboardType, maxLines, prefixText, capitalization})`, `AmountField({controller, currency, onChanged, color, autofocus})`, `pickDate(context, initial)`.
+- Money: `AmountText(minor, {currency, tone: AmountTone{neutral,income,expense,muted}, signed, style})` (tabular figures), `ActivityTile({item, currency, onTap, showDate})` (icon/color by kind/type; owes titled by party; Pending `StatusPill`), `StatusPill(label, {color})`.
+- Feedback: `EmptyState({icon, title, message, actionLabel, onAction})`, `ErrorBanner(message?)`, `InfoNote(text)`, `showMessage(context, text)`, `confirmDelete(context, {title, message}) → Future<bool>`.
+- Sheets: `showAppSheet(context, builder)` (scroll-controlled, keyboard-aware), `SheetScaffold({title, subtitle, children, primaryLabel, onPrimary, error, busy, secondaryLabel, onSecondary, destructiveLabel, onDestructive})`, `showPickerSheet<T>(context, {title, options: List<PickerOption<T>{value,title,subtitle,icon,indent}>, selected, emptyMessage, footerLabel, onFooter}) → Future<T?>`, `BottomActionBar(child)`.
+- `categoryIcon(name, {income})` maps keywords (food, salary, phone, rent, fuel, health…) to Material icons, fallback `sell_outlined` / `south_west_rounded`.
+
+### 6.6 Theme & sizes
+- `AppTheme.light()/dark()` → `_build`: palette (`_Palette.light/dark`) mapped onto `ColorScheme.fromSeed(...).copyWith(...)` with all `surfaceContainer*` = surface (flat) and `surfaceContainerHighest` = field color. `AppColors` extension (`AppColors.of(context)`): income, expense, transfer, warning (+Container variants), neutralContainer.
+  - Light: bg `#F3F4F6`, surface white, text `#101828`/`#667085`, primary `#2C5BE0`, primaryContainer `#E3EAFD`. Dark: bg `#0C0E13`, surface `#171A21`, text `#ECEEF2`/`#98A2B3`, primary `#8AA8FF`, primaryContainer `#23315C`.
+  - Component themes: AppBar (flat, bg = background), NavigationBar (68dp, indicator primaryContainer), FAB (radius 16), Card (border, radius 16), Divider, Input (filled, borderless, radius 12, focus ring primary), Filled/Outlined buttons (52dp, radius 12), SegmentedButton, Chip, BottomSheet (drag handle, radius 28, bg = background), Dialog (radius 20), SnackBar (floating, inverse), DatePicker.
+  - Text: displaySmall 32/w700 (hero amounts), headlineMedium 28, headlineSmall 24, titleLarge 20/w600, titleMedium 16/w600, bodyLarge 16, bodyMedium 14, bodySmall 12 (secondary color), labelLarge 14/w600.
+- `app_sizes.dart`: `TextSize{caption 12, small 13, body 14, bodyLarge 16, title 16, headline 20, largeTitle 28, amount 32, amountInput 44}`, `CardSize{padding 16, heroPadding 20}`, `IconSize{small 18, medium 20, large 24, hero 36}`, `RadiusSize{small 8, medium 12, large 16, extraLarge 20, sheet 28}`, `SpaceSize{tiny 2, extraSmall 4, small 8, medium 12, large 16, extraLarge 20, section 28, huge 40, gutter 16, fabClearance 96}`, `ComponentSize{iconBadge 40, minTouchTarget 48, buttonHeight 52, navigationBarHeight 68, splashLogo 72, tileDividerIndent 68}`.
+- `ui_ux.json` v2 documents the design (not loaded at runtime).
+
+---
+
+## 7. Tests (`test/`)
+Use `sqfliteFfiInit()` + `LocalDatabase(factory: databaseFactoryFfi[NoIsolate], path: inMemoryDatabasePath)`. Widget tests use a `_settle` helper (`runAsync` delay + `pumpAndSettle`) because sqflite futures are real async. NavigationBar labels are found with `find.descendant(of: find.byType(NavigationBar), ...)`; `SliverAppBar.medium` titles appear twice (use `findsWidgets`).
+- `data_layer_test.dart`: seeded defaults; v2 upgrade; balances/owing/tax/dashboard; activity merge; **category totals by month** (excludes owes and other months).
+- `app_smoke_test.dart`: shell (Overview, Total balance, welcome card, nav, Add menu → Add expense / Transfer money, Reports, Settings); **end-to-end expense** (Add → Expense → amount 1250.5 → Category Food → Cash preselected → Save → "Saved", balance −125050); appearance segmented System/Light/Dark persisted.
+- `formatters_test.dart`: money grouping/symbols/signs, amountInputText, relative/long dates.
+- The test font renders wide glyphs, so it catches text overflow (a real one in the balance card was fixed this way). For visual review, a temporary test can load Roboto from `<flutter>/bin/cache/artifacts/material_fonts` and `RenderRepaintBoundary.toImage()` screens to PNG.
+
+---
+
+## 8. Known gaps / quirks (useful when adding features)
+- Tax payments and transfers: create-only in UI (no edit/delete); their History rows aren't tappable.
+- Transaction type can't be changed when editing.
+- Asset ↔ purchase-expense link exists in data layer but has no UI (`purchaseTransactionId` preserved on edit).
+- `CategoryRepository.childrenOf` unused.
+- Archived accounts still count in Home total balance (`DashboardSummary.totalBalanceMinor`) but the "Across N accounts" text and Accounts card count only active ones; Account screen total counts active only.
+- Category tree: a child whose type differs from its parent appears indented in its own type section without the parent.
+- Empty note saved as `''` not `null`.
+- Dates use local ISO strings; no timezone handling. No date-format setting.
+- No i18n; strings are inline English.
+
+## 9. Recent history (git)
+- `3caed13` schema v3 + seed default categories/accounts
+- `165f2cf` removed microfinance account type
+- `cefac17` recent activity on home
+- `d70eb8b` theme mode default → system
+- `7b62f4d` UI component sizing refactor (app_sizes.dart)
+
+## 10. How to add things (checklists)
+- **New screen/UI:** compose only from `app_widgets.dart` components (SectionHeader + GroupedCard + AppTile/FormRow, SheetScaffold for editors, showPickerSheet for choices, EmptyState/ErrorBanner). Use `SpaceSize.gutter` margins, `AppColors` for money semantics, plain-language labels. Pushed pages need a Scaffold + AppBar. Reachable from Home or Settings › Manage.
+- **New entity:** model in `data/models` (+ `part`, run build_runner) → table in `_createSchema` + migration in `_upgradeSchema` (bump version) → repo extending `CrudRepository` → field on `AppServices` → controller extending `BaseController` (call `services.changed()` after writes) → screen with `AnimatedBuilder(controller)` → navigation entry → tests.
+- **New setting:** key in `app_settings` via `SettingsService` getter/setter (insert-replace) → mirror on `AppServices` if global → `SettingsController` + a tile in `SettingsScreen` Preferences (picker sheet or SegmentedButton).
+- **New money field:** store as `int` minor; parse with `MoneyAmount.parse`; display with `AmountText`/`money()`; prefill inputs with `amountInputText()`.
+- **Affects balances?** Update `AccountRepository.balanceMinor` AND `DashboardService` AND `ActivityService` consistently.

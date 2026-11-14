@@ -15,6 +15,7 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen> {
   late final SplashController controller;
+
   @override
   void initState() {
     super.initState();
@@ -33,13 +34,15 @@ class _SplashScreenState extends State<SplashScreen> {
   void _onState() {
     if (controller.ready && mounted) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (_) => AppShell(services: widget.services),
-            ),
-          );
-        }
+        if (!mounted) return;
+        Navigator.of(context).pushReplacement(
+          PageRouteBuilder<void>(
+            transitionDuration: const Duration(milliseconds: 250),
+            pageBuilder: (_, _, _) => AppShell(services: widget.services),
+            transitionsBuilder: (_, animation, _, child) =>
+                FadeTransition(opacity: animation, child: child),
+          ),
+        );
       });
     }
   }
@@ -47,48 +50,64 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: controller,
-    builder: (context, _) => Scaffold(
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(SpaceSize.huge),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircleAvatar(
-                radius: ComponentSize.splashLogoRadius,
-                backgroundColor: Theme.of(context).colorScheme.primary,
-                child: Icon(
-                  Icons.account_balance_wallet_rounded,
-                  color: Theme.of(context).colorScheme.onPrimary,
-                  size: IconSize.large,
-                ),
+    builder: (context, _) {
+      final theme = Theme.of(context);
+      final scheme = theme.colorScheme;
+      return Scaffold(
+        body: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(SpaceSize.huge),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: ComponentSize.splashLogo,
+                    height: ComponentSize.splashLogo,
+                    decoration: BoxDecoration(
+                      color: scheme.primary,
+                      borderRadius: BorderRadius.circular(
+                        RadiusSize.extraLarge,
+                      ),
+                    ),
+                    child: Icon(
+                      Icons.account_balance_wallet_rounded,
+                      color: scheme.onPrimary,
+                      size: IconSize.hero,
+                    ),
+                  ),
+                  const SizedBox(height: SpaceSize.extraLarge),
+                  Text('Money Tracker', style: theme.textTheme.headlineSmall),
+                  const SizedBox(height: SpaceSize.extraSmall),
+                  Text(
+                    'Know where your money stands',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: SpaceSize.huge),
+                  if (controller.error == null)
+                    const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2.5),
+                    )
+                  else ...[
+                    const ErrorBanner(
+                      'Couldn’t open your data. Please try again.',
+                    ),
+                    const SizedBox(height: SpaceSize.medium),
+                    FilledButton(
+                      onPressed: controller.initialize,
+                      child: const Text('Try again'),
+                    ),
+                  ],
+                ],
               ),
-              const SizedBox(height: SpaceSize.betweenCards),
-              Text(
-                'Money Tracker',
-                style: Theme.of(context).textTheme.headlineMedium,
-              ),
-              const SizedBox(height: SpaceSize.small),
-              Text(
-                'Know where your money stands',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: SpaceSize.huge),
-              if (controller.error == null)
-                const CircularProgressIndicator()
-              else ...[
-                AppError(controller.error),
-                FilledButton(
-                  onPressed: controller.initialize,
-                  child: const Text('Try again'),
-                ),
-              ],
-            ],
+            ),
           ),
         ),
-      ),
-    ),
+      );
+    },
   );
 }

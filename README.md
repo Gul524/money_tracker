@@ -2,32 +2,43 @@
 
 An editable description of the current interface is in [ui_ux.json](ui_ux.json). Change that file and share it to request UI updates; the app does not load the JSON at runtime.
 
-UI dimensions are centralized in [lib/app/app_sizes.dart](lib/app/app_sizes.dart). Edit `TextSize.extraLarge`, `CardSize.large`, `IconSize.medium`, `RadiusSize.extraLarge`, `SpaceSize.section`, or `ComponentSize.centerActionHeight` to adjust the corresponding sizes across the app. Cards grow with their content; `CardSize` controls their inner padding rather than setting a fixed card height. Flutter still applies the device's accessibility text scaling.
+UI dimensions are centralized in [lib/app/app_sizes.dart](lib/app/app_sizes.dart) on a 4 dp grid (`TextSize`, `CardSize`, `IconSize`, `RadiusSize`, `SpaceSize`, `ComponentSize`). Colors and component styles live in [lib/app/app_theme.dart](lib/app/app_theme.dart); finance colors (income, expense, transfer, warning) are the `AppColors` theme extension. Flutter still applies the device's accessibility text scaling.
 
 A local first mobile app for recording income, expenses, money owed to you, money you owe, tax payments, transfers, accounts, and assets. The app now has a Flutter UI backed by controllers and SQLite repositories.
 
 ## Product and UI plan
 
-The dashboard leads with total account balance and monthly net, followed by income and expenses, outstanding amounts, assets, tax, account balances, and the five most recent transactions, tax payments, or transfers. Owe, Accounts, and Assets open from their overview sections; Categories are available from the transaction form. The floating, rounded bottom bar has Home, History, an elevated split action control, Reports, and Settings. The control's left **+** button opens a new transaction; its right **↔** button opens a transfer. Tax payments are entered from the transaction screen as a distinct record type.
+The design follows Material 3 and Apple's Human Interface Guidelines: neutral inset-grouped lists, one brand-colored hero surface, readable type, plain language, and 48 dp touch targets. The standard bottom navigation bar has Home, History, Reports, and Settings. A single **+ Add** button (on Home, History and Money owed) opens a menu that names each choice plainly: Expense, Income, Transfer, Someone owes me, I owe someone, Tax payment. Settings is the hub for Accounts, Categories, Money owed, and Assets.
 
 ```text
-Home   History   ┌─────┬─────┐   Reports   Settings
-                 │  +  │  ↔  │
-                 └─────┴─────┘
+┌──────────────────────────────┐
+│ Overview                     │
+│ ┌──────────────────────────┐ │
+│ │ Total balance            │ │
+│ │ Rs 262,851.00            │ │
+│ └──────────────────────────┘ │
+│ This month   [Income][Spent] │
+│ Money owed   [To you][You owe]│
+│ Accounts / Recent activity   │
+│                    ( + Add ) │
+├──────────────────────────────┤
+│ Home  History  Reports  Settings│
+└──────────────────────────────┘
 ```
 
 | Screen | Purpose |
 | --- | --- |
-| Dashboard | Total balance and monthly net; income, expense, and tax paid; pending owe in/out; account balances; asset value; five recent activity entries with a link to History. |
-| Add / manage transaction | Record income, expense, owe in, or owe out. Require category; allow optional nested subcategory, note, and party. Select an account for immediate money movement. |
-| Categories | Create, rename, and delete income, expense, or both categories at any depth. A parent and any nested category can be selected for a transaction. |
-| Accounts | CRUD for cash and bank accounts; show calculated balance and allow archiving. |
-| Assets | CRUD for held items, acquisition cost, estimated current value, and optional linked purchase expense. |
-| History | Show transactions, tax payments, and transfers in date order; open transactions for editing or deletion. Search and filters are future work. |
-| Reports | Show current month income, expenses, tax paid, and net, plus current balances, pending owes, and asset value. |
-| Transfer | Move an amount between two different accounts without changing income or expense totals. |
-| Owe | Show pending owed amounts and due dates; complete an owe against an account. |
-| Settings | Choose a display currency and light, dark, or device appearance; see local storage information. Date format preferences are future work. |
+| Home | Total balance and net this month; income and spending; money owed; accounts; five recent entries; assets and tax. A welcome card guides first-time users. |
+| Add menu | Choose what to record in plain words; Expense and Income are the largest targets. |
+| Transaction | Large amount entry, type chips, then Category, Account, Date (and Person and Due date for owes) as tappable rows. Save stays above the keyboard. Edit and delete existing entries. |
+| Transfer | Amount, From and To accounts with a swap button, date, and note. |
+| History | Every entry grouped by day with a daily net; search, and filter chips for Expenses, Income, Transfers, Owed, and Tax. |
+| Reports | Pick a month; see net, income versus outflow, spending and income by category, and where you stand today, including net worth. |
+| Settings | Currency, appearance (System, Light, Dark), links to Accounts, Categories, Money owed, and Assets, and privacy information. |
+| Accounts | Active and archived cash and bank accounts with balances; edit, archive, or delete in a sheet. |
+| Categories | Expense, income, and shared categories shown as an indented tree; rename, move, or delete. |
+| Money owed | Pending amounts owed to you and by you, with overdue items in red; mark them as received or paid into an account. |
+| Assets | Things you own, their value, and gain or loss. |
 
 ## Data rules
 
@@ -49,10 +60,11 @@ lib/data/services/     SQLite schema/connection, dashboard and settings
 lib/data/repo/         Shared CRUD implementation and entity repositories
 lib/app/controllers/   Screen state, validation and repository calls
 lib/app/screens/       Navigation and screen-specific presentation
-lib/app/widgets/       Shared cards, rows, fields and date controls
+lib/app/widgets/       Design-system components (GroupedCard, AppTile, FormRow, pickers, sheets)
+lib/app/formatters.dart  Money and date formatting
 ```
 
-`LocalDatabase` owns the database connection and schema. Category, Account, Transaction, Asset, Tax, and Transfer repositories expose `create`, `getById`, `getAll`, `update`, and `delete`, plus focused queries. Shared behavior lives in `CrudRepository`. Screen controllers call repositories and services; screens pass user input to controllers and render their state. Shared interaction widgets accept `isViewOnly` to render values without editing.
+`LocalDatabase` owns the database connection and schema. Category, Account, Transaction, Asset, Tax, and Transfer repositories expose `create`, `getById`, `getAll`, `update`, and `delete`, plus focused queries. Shared behavior lives in `CrudRepository`. Screen controllers call repositories and services; screens pass user input to controllers and render their state. Screens are built only from the shared components in `app_widgets.dart`, so spacing and styling stay consistent.
 
 The SQLite schema is version 3. IDs link categories to their parent, transactions to categories/accounts, assets to optional purchase transactions, tax payments to accounts, and transfers to both accounts. Existing version 1 and 2 databases are upgraded in place. Foreign keys are enabled on every connection.
 

@@ -293,4 +293,49 @@ void main() {
       expect(recent.first.subtitle, 'Cash → Bank');
     },
   );
+
+  test('category totals group a month of income and expense', () async {
+    final storage = LocalDatabase(
+      factory: databaseFactoryFfi,
+      path: inMemoryDatabasePath,
+    );
+    addTearDown(storage.close);
+    final categories = CategoryRepository(storage);
+    final transactions = TransactionRepository(storage);
+    final all = await categories.getAll();
+    final food = all.firstWhere((c) => c.name == 'Food');
+    final phone = all.firstWhere((c) => c.name == 'Phone');
+    final salary = all.firstWhere((c) => c.name == 'Salary');
+    final cash = (await AccountRepository(storage).getAll()).single;
+
+    Future<void> add(
+      TransactionType type,
+      int amount,
+      int categoryId,
+      DateTime at,
+    ) => transactions.create(
+      MoneyTransaction(
+        type: type,
+        amountMinor: amount,
+        categoryId: categoryId,
+        accountId: type == TransactionType.oweOut ? null : cash.id,
+        occurredAt: at,
+        oweStatus: type == TransactionType.oweOut ? OweStatus.pending : null,
+      ),
+    );
+
+    final nov = DateTime(2026, 11, 10);
+    await add(TransactionType.expense, 300, food.id!, nov);
+    await add(TransactionType.expense, 200, food.id!, nov);
+    await add(TransactionType.expense, 900, phone.id!, nov);
+    await add(TransactionType.income, 5000, salary.id!, nov);
+    await add(TransactionType.oweOut, 700, food.id!, nov);
+    await add(TransactionType.expense, 999, food.id!, DateTime(2026, 10, 31));
+
+    final totals = await DashboardService(storage).categoryTotals(nov);
+    expect(
+      [for (final t in totals) (t.name, t.isIncome, t.totalMinor)],
+      [('Salary', true, 5000), ('Phone', false, 900), ('Food', false, 500)],
+    );
+  });
 }

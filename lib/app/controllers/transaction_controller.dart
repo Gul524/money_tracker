@@ -4,17 +4,22 @@ import '../../data/models/model_types.dart';
 import '../../data/models/money_transaction.dart';
 import '../../data/models/tax_payment.dart';
 import 'base_controller.dart';
+import '../formatters.dart';
 import 'category_path.dart';
 import 'money_amount.dart';
 
 enum EntryKind { income, expense, oweIn, oweOut, tax }
 
 class TransactionController extends BaseController {
-  TransactionController(super.services, {MoneyTransaction? existing})
-    : editing = existing {
+  TransactionController(
+    super.services, {
+    MoneyTransaction? existing,
+    EntryKind initialKind = EntryKind.expense,
+  }) : editing = existing,
+       kind = initialKind {
     if (existing != null) {
       kind = EntryKind.values.byName(existing.type.name);
-      amountText = (existing.amountMinor / 100).toStringAsFixed(2);
+      amountText = amountInputText(existing.amountMinor);
       categoryId = existing.categoryId;
       accountId = existing.accountId;
       occurredAt = existing.occurredAt;
@@ -28,7 +33,8 @@ class TransactionController extends BaseController {
   final MoneyTransaction? editing;
   List<Account> accounts = [];
   List<Category> categories = [];
-  EntryKind kind = EntryKind.expense;
+  Map<int, int> balances = {};
+  EntryKind kind;
   String amountText = '';
   int? categoryId;
   int? accountId;
@@ -48,6 +54,10 @@ class TransactionController extends BaseController {
       )
       .toList();
   String pathFor(Category category) => categoryPath(category, categories);
+  Category? get selectedCategory =>
+      categories.where((c) => c.id == categoryId).firstOrNull;
+  Account? get selectedAccount =>
+      accounts.where((a) => a.id == accountId).firstOrNull;
 
   @override
   void refresh() {
@@ -56,6 +66,14 @@ class TransactionController extends BaseController {
       accounts = (await services.accounts.getAll())
           .where((a) => !a.isArchived)
           .toList();
+      balances = {
+        for (final a in accounts)
+          a.id!: await services.accounts.balanceMinor(a.id!),
+      };
+      // Preselect the only account so a first-time user has one less step.
+      if (editing == null && accountId == null && accounts.length == 1) {
+        accountId = accounts.first.id;
+      }
     });
   }
 

@@ -32,6 +32,13 @@ abstract class BaseController extends ChangeNotifier {
   }
 
   void refresh();
+
+  void clearError() {
+    if (error == null) return;
+    error = null;
+    changed();
+  }
+
   void changed() {
     if (!_disposed) notifyListeners();
   }

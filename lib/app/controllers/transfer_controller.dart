@@ -8,6 +8,7 @@ class TransferController extends BaseController {
     refresh();
   }
   List<Account> accounts = [];
+  Map<int, int> balances = {};
   int? fromAccountId;
   int? toAccountId;
   String amountText = '';
@@ -20,7 +21,18 @@ class TransferController extends BaseController {
       accounts = (await services.accounts.getAll())
           .where((a) => !a.isArchived)
           .toList();
+      balances = {
+        for (final a in accounts)
+          a.id!: await services.accounts.balanceMinor(a.id!),
+      };
     });
+  }
+
+  void swap() {
+    final from = fromAccountId;
+    fromAccountId = toAccountId;
+    toAccountId = from;
+    changed();
   }
 
   void setFrom(int? value) {
