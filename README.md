@@ -35,6 +35,7 @@ The design follows Material 3 and Apple's Human Interface Guidelines: neutral in
 | History | Every entry grouped by day with a daily net. Search by name, note, account or amount; filter by type, account, category (including subcategories) and dates (this month, last month, last 3 months, this year, custom). Shows the count and money in/out of the results. Every row opens its editor. |
 | Reports | Month, 6 months, year or custom dates. Net, income, expenses and tax for the period; month-by-month chart; spending and income by category with subcategories (tap to see the entries); tax paid by account; money in and out per account; where you stand today, including net worth. |
 | Settings | Currency, appearance (System, Light, Dark), links to Accounts, Categories, Money owed, and Assets, and privacy information. |
+| Import and export | Settings › Data. Export entries for a month, 6 months, a year or custom dates to an Excel file, and import the same format back (missing wallets and categories are created; existing entries are skipped as duplicates). |
 | Accounts | Active and archived cash and bank accounts with balances. Tap one to see its balance, this month's money in and out, and all its activity; edit, archive, or delete from there. |
 | Categories | Expense, income, and shared categories shown as an indented tree; rename, move, or delete. Each category can have its own icon (from a grouped icon grid) and any tag color (color picker or hex), shown everywhere the category appears. |
 | Money owed | Pending amounts owed to you and by you, with overdue items in red; mark them as received or paid into an account. |
@@ -62,6 +63,7 @@ lib/app/controllers/   Screen state, validation and repository calls
 lib/app/screens/       Navigation and screen-specific presentation
 lib/app/widgets/       Design-system components (GroupedCard, AppTile, FormRow, pickers, sheets)
 lib/app/formatters.dart  Money and date formatting
+packages/transaction_io/ Self-contained Excel import/export module (format, isolates, duplicates)
 ```
 
 `LocalDatabase` owns the database connection and schema. Category, Account, Transaction, Asset, Tax, and Transfer repositories expose `create`, `getById`, `getAll`, `update`, and `delete`, plus focused queries. Shared behavior lives in `CrudRepository`. Screen controllers call repositories and services; screens pass user input to controllers and render their state. Screens are built only from the shared components in `app_widgets.dart`, so spacing and styling stay consistent.

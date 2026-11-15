@@ -8,6 +8,7 @@ import 'account_screen.dart';
 import 'asset_screen.dart';
 import 'category_screen.dart';
 import 'defaults_screen.dart';
+import 'import_export_screen.dart';
 import 'owe_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -176,6 +177,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         title: 'Assets',
                         subtitle: 'Things you own and their value',
                         onTap: () => _open(AssetScreen(services: services)),
+                      ),
+                    ],
+                  ),
+                  const SectionHeader('Data'),
+                  GroupedCard(
+                    children: [
+                      AppTile(
+                        leading: const IconBadge(Icons.import_export_rounded),
+                        title: 'Import and export',
+                        subtitle: 'Excel (.xlsx) files of your entries',
+                        onTap: () =>
+                            _open(ImportExportScreen(services: services)),
                       ),
                     ],
                   ),

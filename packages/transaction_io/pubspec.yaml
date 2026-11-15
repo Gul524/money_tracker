@@ -1,0 +1,14 @@
+name: transaction_io
+description: "Excel (.xlsx) import and export of money tracker transactions. Self-contained; runs heavy work on a background isolate."
+publish_to: 'none'
+version: 1.0.0
+
+environment:
+  sdk: ^3.13.3
+
+dependencies:
+  excel: ^4.0.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter

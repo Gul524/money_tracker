@@ -2,9 +2,8 @@ import '../../data/models/category.dart';
 import '../../data/services/dashboard_service.dart';
 import '../../data/services/report_service.dart';
 import '../date_range.dart';
+export '../date_range.dart' show ReportPeriod;
 import 'base_controller.dart';
-
-enum ReportPeriod { month, sixMonths, year, custom }
 
 /// A top-level category with its subcategories' totals rolled up.
 class CategoryGroup {
@@ -59,12 +58,7 @@ class ReportsController extends BaseController {
   void setPeriod(ReportPeriod value) {
     if (value == ReportPeriod.custom) return;
     period = value;
-    range = switch (value) {
-      ReportPeriod.month => DateRange.month(_today),
-      ReportPeriod.sixMonths => DateRange.months(_today, 6),
-      ReportPeriod.year => DateRange.year(_today.year),
-      ReportPeriod.custom => range,
-    };
+    range = DateRange.current(value, _today) ?? range;
     refresh();
   }
 
@@ -77,29 +71,17 @@ class ReportsController extends BaseController {
   bool get canStep => period != ReportPeriod.custom;
 
   /// Whether a later period exists that has started already.
-  bool get canGoNext => canStep && !_shift(1).start.isAfter(_today);
-
-  DateRange _shift(int direction) => switch (period) {
-    ReportPeriod.month => DateRange.month(
-      DateTime(range.start.year, range.start.month + direction),
-    ),
-    ReportPeriod.sixMonths => DateRange(
-      DateTime(range.start.year, range.start.month + 6 * direction),
-      DateTime(range.end.year, range.end.month + 6 * direction),
-    ),
-    ReportPeriod.year => DateRange.year(range.start.year + direction),
-    ReportPeriod.custom => range,
-  };
+  bool get canGoNext => range.canStepForward(period, _today);
 
   void previous() {
     if (!canStep) return;
-    range = _shift(-1);
+    range = range.step(period, -1);
     refresh();
   }
 
   void next() {
     if (!canGoNext) return;
-    range = _shift(1);
+    range = range.step(period, 1);
     refresh();
   }
 

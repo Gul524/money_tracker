@@ -1,5 +1,8 @@
 import 'formatters.dart';
 
+/// Period choices shared by Reports and Export.
+enum ReportPeriod { month, sixMonths, year, custom }
+
 /// A period `start <= date < end`, always on whole days.
 class DateRange {
   const DateRange(this.start, this.end);
@@ -27,6 +30,32 @@ class DateRange {
 
   final DateTime start;
   final DateTime end;
+
+  /// The [period] containing [today]; null for [ReportPeriod.custom].
+  static DateRange? current(ReportPeriod period, DateTime today) =>
+      switch (period) {
+        ReportPeriod.month => DateRange.month(today),
+        ReportPeriod.sixMonths => DateRange.months(today, 6),
+        ReportPeriod.year => DateRange.year(today.year),
+        ReportPeriod.custom => null,
+      };
+
+  /// The previous (−1) or next (+1) period of the same length.
+  DateRange step(ReportPeriod period, int direction) => switch (period) {
+    ReportPeriod.month => DateRange.month(
+      DateTime(start.year, start.month + direction),
+    ),
+    ReportPeriod.sixMonths => DateRange(
+      DateTime(start.year, start.month + 6 * direction),
+      DateTime(end.year, end.month + 6 * direction),
+    ),
+    ReportPeriod.year => DateRange.year(start.year + direction),
+    ReportPeriod.custom => this,
+  };
+
+  /// Whether a next period exists that has already started.
+  bool canStepForward(ReportPeriod period, DateTime today) =>
+      period != ReportPeriod.custom && !step(period, 1).start.isAfter(today);
 
   /// The last day included in the range.
   DateTime get lastDay => DateTime(end.year, end.month, end.day - 1);

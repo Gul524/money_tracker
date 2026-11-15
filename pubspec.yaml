@@ -12,6 +12,10 @@ dependencies:
   json_annotation: ^4.12.0
   path: ^1.9.1
   sqflite: ^2.4.4
+  file_picker: any
+  # Excel import/export module (self-contained, see packages/transaction_io).
+  transaction_io:
+    path: packages/transaction_io
 
 dev_dependencies:
   flutter_test:

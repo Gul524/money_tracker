@@ -17,11 +17,12 @@ Local-first, offline personal finance tracker (Flutter, Material 3, SQLite via `
 - **Assets** (things owned; purchase cost + current value; don't affect balances)
 - **Categories** (hierarchical, typed income/expense/both) with a user-chosen **icon** and **tag color** (any color, stored as `#RRGGBB`)
 - **Settings**: display currency (label only, no conversion), theme mode, and **defaults for new entries** (category + wallet per entry type, wallet per category, transfer From/To)
+- **Import / export** of entries as Excel `.xlsx` (Settings › Data), via the separate `packages/transaction_io` module
 
 Package name `money_tracker`, version `0.1.0+1`, Dart SDK `^3.13.3`. Android applicationId `com.example.money_tracker`. Platforms folders: `android/`, `linux/` (desktop sqflite not configured — tests use `sqflite_common_ffi`).
 
 ### Dependencies (pubspec.yaml)
-- runtime: `flutter`, `json_annotation ^4.12.0`, `path ^1.9.1`, `sqflite ^2.4.4`
+- runtime: `flutter`, `json_annotation ^4.12.0`, `path ^1.9.1`, `sqflite ^2.4.4`, `file_picker` (13.x; static API `FilePicker.pickFiles/saveFile`), `transaction_io` (path: `packages/transaction_io`, which depends on `excel ^4.0.6`)
 - dev: `flutter_test`, `flutter_lints ^6.0.0`, `build_runner ^2.16.1`, `json_serializable ^6.14.1`, `sqflite_common_ffi ^2.4.3`
 - **No state-management package** (plain `ChangeNotifier` + `AnimatedBuilder`). **No router package** (`Navigator.push` + `MaterialPageRoute`). No intl package (dates/money formatted by hand).
 
@@ -31,6 +32,7 @@ flutter pub get
 dart run build_runner build     # regenerate *.g.dart after model changes
 flutter analyze                 # analysis_options: flutter_lints; excludes build/, android/, linux/
 flutter test
+(cd packages/transaction_io && flutter test)   # module tests
 ```
 
 ---
@@ -97,6 +99,7 @@ lib/
       category_controller.dart      Category CRUD
       owe_controller.dart           Pending owes (split owedToMe/iOwe + totals) + complete
       settings_controller.dart      Currency + theme
+      import_export_controller.dart Period/range for export, entry count, calls transaction_io export/import/template
       defaults_controller.dart      Settings › Defaults state (active wallets, categories, EntryDefaults)
     screens/
       splash_screen.dart            Brand mark, init, retry; fades to AppShell
@@ -109,6 +112,7 @@ lib/
       reports_screen.dart           Period segments, range bar, summary, month-by-month chart, categories, tax, accounts, position
       settings_screen.dart          Preferences (incl. Defaults tile) + Manage hub + About
       defaults_screen.dart          Settings › Defaults: per entry type, transfer, and per-category wallet pickers
+      import_export_screen.dart     Settings › Data › Import and export (ExcelFiles abstraction over file_picker)
       transaction_screen.dart       Transaction/tax form (big amount, form rows, pinned Save)
       transfer_screen.dart          Transfer form (From/To + swap); edit/delete when `existing`
       account_screen.dart           Accounts (active/archived) → AccountDetailScreen; showAccountEditor() sheet
@@ -134,11 +138,23 @@ lib/
       activity_service.dart         Merged activity feed (transactions + tax + transfers)
       settings_service.dart         app_settings key/value
       defaults_service.dart         EntryDefaults (category/wallet per entry type, wallet per category) stored in app_settings
+      transaction_io_store.dart     AppTransactionIoStore: the ONLY bridge between the app DB and the transaction_io module
+packages/
+  transaction_io/                   Self-contained Excel import/export module (own pubspec, tests, analysis_options)
+    lib/transaction_io.dart         Public API (exports below)
+    lib/src/tx_row.dart             TxType, OwedStatus, TxRow, RowIssue, transferArrow, categorySeparator
+    lib/src/columns.dart            TxColumn: fixed column layout + header aliases
+    lib/src/xlsx_codec.dart         encodeXlsx / decodeXlsx (pure, sync; run inside isolates)
+    lib/src/duplicates.dart         duplicateKey, splitDuplicates (one-for-one)
+    lib/src/store.dart              TransactionIoStore interface the host implements
+    lib/src/api.dart                exportTransactions, importTransactions, transactionTemplate, exportFileName, ExportResult, ImportSummary
+    test/transaction_io_test.dart   Round trip (times + due dates), period filter, duplicates, flexible parsing, text/serial date-times, row errors, bad files
 test/
   data_layer_test.dart              Repo/service tests (in-memory FFI DB)
   app_smoke_test.dart               Widget tests (shell/add menu/tabs, end-to-end expense, theme switching)
   formatters_test.dart              money/date formatter unit tests
-  features_test.dart                Linked tax, v3→v4 upgrade, period reports, report periods, history filters, range labels
+  features_test.dart                Linked tax, v3→v4 upgrade, period reports, report periods, history filters, range labels, defaults, category look
+  import_export_test.dart           AppTransactionIoStore round trip into a fresh DB, rejected rows, ImportExportScreen with fake ExcelFiles
 README.md                           Product/UI plan + data rules (human doc)
 ui_ux.json                          Editable UI spec v2 (NOT loaded at runtime) — principles, tokens, nav, components, screens
 ```
@@ -229,6 +245,7 @@ Note: repos and services each construct their own repository instances over the 
   - Transfer: title "Transfer", subtitle & accountName "FromName → ToName", amount positive (shown neutral), `transfer` set.
 - **`ReportService.build(start, end)` → `PeriodReport`** (`start <= date < end`): `incomeMinor`, `expenseMinor`, `taxMinor` (all tax_payments incl. linked), `oweReceivedMinor`/`oweRepaidMinor` (completed owes by `completed_at`), `entryCount` (income/expense + standalone tax), `categories: List<CategoryTotal>` (with `parentId`), `accounts: List<AccountFlow{account, inMinor, outMinor, taxMinor, balanceMinor(today)}>` (in = income, received owes, transfers in; out = expense, repaid owes, tax, transfers out; archived accounts only if active in period; sorted by name), `months: List<MonthBucket{month, income, expense, tax}>` (every calendar month in range, grouped by `substr(date,1,7)`); getters `netMinor` (income − expense − tax), `outflowMinor`.
 - **`DefaultsService`** (`services.defaults`): `load()` → `EntryDefaults{categoryByKind, accountByKind, accountByCategory}`; `setCategoryForKind(kind, id?)`, `setAccountForKind(kind, id?)`, `setAccountForCategory(categoryId, accountId?)` (null deletes the row); `forgetCategory(id)` / `forgetAccount(id)` (called by Category/AccountController.remove). `DefaultKind` string constants. No FKs: readers ignore ids that are missing/archived/type-incompatible.
+- **`AppTransactionIoStore(LocalDatabase)`** (implements the module's `TransactionIoStore`): `readRows({from, to})` → transactions (category as full path "Food / Groceries", account name, party, `dueAt`→`dueDate`, owe status/completedAt, linked tax as `taxMinor`), standalone tax (`TxType.tax`), transfers (account "From → To"), sorted by date. `writeRows(rows)` → per row: find wallet by name (case-insensitive) or create it (bank if the name contains "bank", else cash); walk the category path creating missing levels with the row's direction; reject if the final category's type conflicts; save via `saveWithTax` / `taxes.create` / `transfers.create`; collects `RowIssue(sourceRow, message)` per failed row (other rows still saved; not one DB transaction).
 - **`SettingsService`**: `currency()` (default PKR), `setCurrency(code)` allowed `PKR, USD, EUR, GBP` (uses UPDATE on seeded row), `themeMode()` returns `light|dark|system` (default `system`), `setThemeMode(mode)` (INSERT OR REPLACE).
 
 ---
@@ -281,6 +298,7 @@ All (except Splash) extend `BaseController` and call `refresh()` in constructor.
 | `CategoryController` | items | `save({id,name,type,parentId,icon,color})`, `remove(id)`, `pathFor()` |
 | `OweController` | items (pending owes), accounts | `complete(id, accountId)`; getters `owedToMe`, `iOwe`, `owedToMeMinor`, `iOweMinor` |
 | `DefaultsController` | `defaults`, `accounts` (active), `categories` | `categoriesFor(kind)`, `sortedCategories`, `categoryFor(kind)`, `accountFor(kind)`, `accountForCategory(id)`, `setCategory`, `setAccount`, `setCategoryAccount` (each saves then reloads) |
+| `ImportExportController(services, {now, store})` | `period: ReportPeriod`, `range`, `entryCount` (rows in range), `lastImport: ImportSummary?` | `setPeriod`, `setCustomRange`, `previous`, `next`, `canStep`, `canGoNext`; `export()` → `ExportResult?`, `template()` → bytes, `import(bytes)` → `ImportSummary?` (calls `services.changed()` if anything imported). Default store = `AppTransactionIoStore(services.database)`. |
 | `SettingsController` | currency, themeMode | `setCurrency(v)` (also sets `services.currencyCode` + `changed()`), `setThemeMode(v)` |
 
 **`EntryKind { income, expense, oweIn, oweOut, tax }`** (in transaction_controller.dart). `tax` is UI-only and saves to `TaxRepository`.
@@ -314,7 +332,8 @@ Flow: `main` → `SplashScreen` (brand mark, spinner; friendly error + "Try agai
 | `HistoryScreen({services, title='History', accountId, categoryId, range, initialFilter})` | Tab 1; pushed pre-filtered from Reports (category / tax) and Account detail ("Search") | `SliverAppBar.medium(title)`, search ("Search name, note or amount"), chip row: `Filters` ActionChip (Badge = active count) + type ChoiceChips; active filters as InputChips (tap → sheet, × → clear); `_ResultSummary` card (N entries · In · Out) when filtering; `ActivityDayGroups(accountId:)`. `_FilterSheet` (SheetScaffold "Filter activity"): Account picker (All/-1 sentinel), Category picker (tree indent), Date chips (Any time / This month / Last month / Last 3 months / This year / Custom dates… → `showDateRangePicker`), primary "Show N results", secondary "Clear filters". No-match state offers "Clear filters". Every row tappable via `openActivity`. |
 | `AccountDetailScreen({services, accountId})` | Account list, Home accounts card, Reports accounts | AppBar(name, edit ✎ → `showAccountEditor`; pops if deleted). Balance card (Cash/Bank balance, Archived pill, starting balance), "This month · Month Year" Money in / Money out stat cards (per-account `effectOn`), "Activity" + Search (→ HistoryScreen(accountId)), `ActivityDayGroups(accountId)` (transfers shown ± for this account, account name omitted). Uses `AccountController` + `HistoryController(accountId)`. |
 | `ReportsScreen` | Tab 2 | `ReportsController`. `SegmentedButton` Month / 6 months / Year / Custom (Custom → `showDateRangePicker`), `_RangeBar` (‹ label › with next disabled at current; custom: "Change" row), `_Summary` (Net for this period, income/expense/tax bar, rows, "N entries"), "Month by month" `_TrendChart` (only when >1 month; income vs spending incl. tax bars, Semantics label), "Spending by category" / "Income by category" `_Breakdown` (rolled-up groups with subcategory lines; tap → HistoryScreen(category, range, type)), "Tax paid" `_TaxSection` (total, % of income, per account; "See entries" → History tax filter), "Accounts" `_AccountFlows` (In · Out, signed net; tap → AccountDetailScreen), "Money owed settled" (if any), "Where you stand today" `_Position` (net worth). |
-| `SettingsScreen({services})` | Tab 3 | `SliverAppBar.medium('Settings')`: Preferences (Currency tile → picker of `currencyNames`; "Defaults for new entries" → `DefaultsScreen`; Appearance `SegmentedButton<ThemeMode>` System/Light/Dark), InfoNote about no conversion, Manage (Accounts, Categories, Money owed, Assets → push), About (privacy, Version 0.1.0). |
+| `SettingsScreen({services})` | Tab 3 | `SliverAppBar.medium('Settings')`: Preferences (Currency tile → picker of `currencyNames`; "Defaults for new entries" → `DefaultsScreen`; Appearance `SegmentedButton<ThemeMode>` System/Light/Dark), InfoNote about no conversion, Manage (Accounts, Categories, Money owed, Assets → push), **Data (Import and export → `ImportExportScreen`)**, About (privacy, Version 0.1.0). |
+| `ImportExportScreen({services, files})` | Settings › Data | AppBar 'Import and export'. Working row (spinner + "Preparing Excel file…"/"Importing…"), ErrorBanner. "Export to Excel": period `SegmentedButton` Month/6 months/Year/Custom (date range picker), card with ‹ range › (custom: "Change"), "N entries in this period", FilledButton "Export to Excel" (disabled at 0) → `files.save(fileName, bytes)` → snackbar "Exported N entries to …". InfoNote listing columns. "Import from Excel" card: explanation, "Choose Excel file" (`files.pick()` → import → snackbar "Imported X, skipped Y duplicates"), "Save a blank template". "Last import" GroupedCard (Imported / Skipped as duplicates / Problems) + first 30 issues ("Row N: message"). `ExcelFiles` interface (save/pick) defaults to `_PlatformExcelFiles` using `FilePicker.saveFile(bytes, xlsx MIME)` / `pickFiles(custom, ['xlsx'])`; tests inject a fake. |
 | `TransactionScreen({services, existing, existingTax, initialKind})` | Add menu, `openActivity` (transactions & standalone tax), Owe "Edit details" | AppBar title by kind ("Add expense", "Someone owes me", "Edit tax payment"…), delete icon when editing (confirm mentions linked tax). Body: kind `ChoiceChip`s (new only), `AmountField` (income green, else neutral), GroupedCard[Category (picker w/ icons + "Manage categories" footer → CategoryScreen), Account (picker w/ balances; optional+clearable for owes), Date, Due date (owes, clearable)], **income/expense only:** GroupedCard[`FormTextRow(amount, prefix symbol, suffix "tax paid", hint "Tax paid (optional)")`], GroupedCard[Person (owes), Note], InfoNote tax summary ("Rs 1,170.00 leaves Cash: Rs 1,000.00 plus Rs 170.00 tax." / "Bank receives … minus … tax."), InfoNote for owes/tax, ErrorBanner. `bottomNavigationBar: BottomActionBar(Save)`. |
 | `TransferScreen({services, existing})` | Add menu, `openActivity` | Title "Transfer money"/"Edit transfer" (+ delete icon), `AmountField` (blue), GroupedCard[From, To] with centered `IconButton.filledTonal` swap, GroupedCard[Date, Note], InfoNote, pinned "Transfer"/"Save". |
 | `DefaultsScreen` | Settings › Defaults for new entries | AppBar 'Defaults', InfoNote (category wallet beats type wallet), sections Expense / Income / Someone owes me / I owe someone (Category + Wallet FormRows, clearable, placeholder "None"), Tax payment (Wallet), Transfer (From/To), then "Wallet for expense/income/shared categories" tiles (indented tree, trailing wallet or "None"). Pickers include "No default" (-1 sentinel). |
@@ -332,6 +351,7 @@ Exports `formatters.dart` and `category_icons.dart`.
 - In `screens/activity_list.dart`: `ActivityDayGroups({items, services, accountId})`, `openActivity(context, services, item)` (transaction → TransactionScreen, tax → TransactionScreen(existingTax), transfer → TransferScreen(existing); "Saved" snackbar).
 - Feedback: `EmptyState({icon, title, message, actionLabel, onAction})`, `ErrorBanner(message?)`, `InfoNote(text)`, `showMessage(context, text)`, `confirmDelete(context, {title, message}) → Future<bool>`.
 - Sheets: `showAppSheet(context, builder)` (scroll-controlled, keyboard-aware), `SheetScaffold({title, subtitle, children, primaryLabel, onPrimary, error, busy, secondaryLabel, onSecondary, destructiveLabel, onDestructive})`, `showPickerSheet<T>(context, {title, options: List<PickerOption<T>{value,title,subtitle,icon,indent}>, selected, emptyMessage, footerLabel, onFooter}) → Future<T?>`, `BottomActionBar(child)`.
+- **Periods:** `ReportPeriod {month, sixMonths, year, custom}` lives in `date_range.dart` (re-exported by reports_controller) with `DateRange.current(period, today)`, `range.step(period, ±1)`, `range.canStepForward(period, today)`; used by Reports and Import/Export.
 - **Category look** (`widgets/category_icons.dart`, exported by app_widgets): `categoryIconGroups` (9 labelled groups, ~90 icons; **keys are persisted — never rename**), `isCategoryIconKey`, `categoryIcon(name, {income, iconKey})` (chosen key, else keyword guess: food, salary, phone, rent, fuel, health…, fallback `sell_outlined`/`south_west_rounded`), `colorFromHex`/`colorToHex` (`#RRGGBB`), `categorySwatches` (12), `categoryColor(name, {hex})` (stored color or stable swatch from a name hash), `readableCategoryColor(color, brightness)` (lightens dark colors in dark mode, darkens pale ones in light mode), `CategoryBadge({name, iconKey, colorHex, income, size=40})` (tinted rounded square, alpha .14 light / .22 dark). Used by category list/pickers, transaction Category row & picker, History filter picker, Defaults, Reports breakdown (bar uses category color), and `ActivityTile` for income/expense (owes/tax/transfer keep semantic icons).
 - **Pickers** (`widgets/category_pickers.dart`): `showIconPickerSheet(context, {color, selected, automatic}) → String?` (`automaticIcon` = '' for "Automatic"; cells have Semantics labels = key with spaces), `showColorPickerSheet(context, {initial, icon}) → Color?` (SheetScaffold "Tag color": preview badge + swatch + Hex field (6 hex chars), `_SaturationValuePanel` (white→hue × transparent→black; tap/drag via separate vertical+horizontal drag recognizers so the sheet doesn't steal drags), `_HueSlider`, quick swatches, "Use this color").
 - `PickerOption` has `leading` (overrides `icon`); `FormRow` has `leading` (overrides `icon`) and `valueLeading` (before value text).
@@ -346,6 +366,15 @@ Exports `formatters.dart` and `category_icons.dart`.
 
 ---
 
+## 6.7 Import/export module (`packages/transaction_io`)
+Separate Dart package; the app only calls its public functions and implements `TransactionIoStore` (in `data/services/transaction_io_store.dart`). The module never imports app code.
+- **Format (same for export and import)** — sheet `Transactions` (+ `How to import` help sheet), bold header row, columns in order: `Sr`, `Type` (Income / Expense / Owed to me / I owe / Tax / Transfer), `Category` ("Parent / Child"; blank for Tax/Transfer), `Amount` (number, major units), `Date` (Excel **date-time** to the second, `yyyy-mm-dd hh:mm:ss`), `Account` (wallet; transfers "From → To"; may be blank for pending owes), `Note`, `Owed person`, `Due date` (date-time; owes only), `Owed completed` (date-time), `Owed status` (Pending/Completed), `Tax paid` (number; income/expense only). Export rows sorted by date, Sr 1..N; file name `transactions_<from>_to_<last>.xlsx` (or `transactions_all.xlsx`).
+- **Import parsing** (`decodeXlsx`): uses sheet `Transactions` else first non-empty sheet; header row = first row containing Type+Amount+Date (any order; aliases via `TxColumn.match`, case/spacing ignored; extra columns ignored); blank rows skipped. Type synonyms (outgoing, spent, lent, borrowed…); amounts from numbers or text like "Rs 1,250.50" (abs, must be ≠0); dates from Excel date / date-time cells, serial numbers (time fraction rounded to the second), and text: a date (`yyyy-mm-dd`, `dd/mm/yyyy`, `15 Nov 2026`) optionally followed (space, `T` or `,`) by a time `14:30`, `14:30:05(.fff)`, `2:30 PM` (trailing `Z`/offset ignored; invalid times are row errors); a date without time = midnight. `Due date` is kept only for owes. Rules: category required for income/expense/owes, account required except pending owes; owe status from text, or Completed when a completed date exists; completed owe needs an account; transfer account must split on →, -> or => into two different names. Bad rows become `RowIssue(rowNumber, message)`; good rows continue.
+- **Duplicates** (`splitDuplicates`): key = type | account (lower-case; transfer "from>to") | amountMinor | calendar **day** (time ignored on purpose, so hand-typed dates without times still match). Compared against **all** existing rows (`store.readRows()`), **one-for-one** (multiset) so genuine repeats survive a round trip; duplicates inside the file alone are not removed.
+- **Threading:** `exportTransactions` reads rows via the store, then `Isolate.run(encodeXlsx)`. `importTransactions` reads existing rows, then one `Isolate.run` does decode + duplicate split; writes happen on the main isolate through `store.writeRows` (sqflite does its own background I/O). `transactionTemplate()` = header-only file in an isolate.
+- **Results:** `ExportResult{bytes, rowCount, fileName}`, `ImportSummary{rowsRead, imported, duplicates, issues (sorted by row)}`.
+- Round trip is lossless for entries: dates/times to the second, owe due & completed date-times, linked tax, category paths, notes, people. (Sub-second precision is dropped.)
+
 ## 7. Tests (`test/`)
 Use `sqfliteFfiInit()` + `LocalDatabase(factory: databaseFactoryFfi[NoIsolate], path: inMemoryDatabasePath)`. Widget tests use a `_settle` helper (`runAsync` delay + `pumpAndSettle`) because sqflite futures are real async. NavigationBar labels are found with `find.descendant(of: find.byType(NavigationBar), ...)`; `SliverAppBar.medium` titles appear twice (use `findsWidgets`).
 - `data_layer_test.dart`: seeded defaults; v2 upgrade; balances/owing/tax/dashboard; activity merge; **category totals by month** (excludes owes and other months).
@@ -354,6 +383,8 @@ Use `sqfliteFfiInit()` + `LocalDatabase(factory: databaseFactoryFfi[NoIsolate], 
 - `features_test.dart` (plain `test`, `AppServices.withDatabase` + `_World` seed: Cash 10,000 + Bank, Food › Groceries; `_idle(controller)` polls `busy`): linked tax balances/move/clear/cascade + owes reject tax; v3→v4 column added; `ReportService.build` totals/accounts/months + category roll-up; report period stepping & labels; History filters (account totals, category tree, preset, tax, amount/text search); `DateRange` labels; category icon/hex color storage, validation, propagation to activity & totals; color/icon helpers; **defaults** (storage, type/category/manual priority, tax & transfer, edit ignores, archived skipped, forget on delete).
 - `app_smoke_test.dart` also: expense **with tax 100** (summary note, balance −135050, `taxMinor`), and History Filters sheet → This month → "Show 1 results" → tap transfer → "Edit transfer"; Reports Year; Home account → AccountDetailScreen; Settings › Defaults pick Expense category Shopping → new expense prefilled Shopping + Cash; CategoryScreen → Food → Icon "local pizza" → Color hex 12ab9c → "#12AB9C" → Save persists `local_pizza`/`#12AB9C`.
 - `data_layer_test.dart` v2 upgrade also asserts `categories` gained `icon`/`color`.
+- `import_export_test.dart`: needs **separate DB files** per `AppServices` (FFI in-memory DBs are shared within a process). Seeds every entry kind (with times of day and owe due dates), exports November, imports into a fresh DB (balances, Food › Groceries, pending/completed owes, exact occurred/due/completed date-times, linked tax match; re-import = all duplicates); app-rejected row (expense on income category) reported with its row number while others import and missing wallets are created; widget test drives `ImportExportScreen` with a fake `ExcelFiles` (count, Year period, export bytes decode, import → "Last import", "Imported 0, skipped 1").
+- Module tests (`packages/transaction_io/test`): run with `flutter test` inside the package.
 - The test font renders wide glyphs, so it catches text overflow (a real one in the balance card was fixed this way). For visual review, a temporary test can load Roboto from `<flutter>/bin/cache/artifacts/material_fonts` and `RenderRepaintBoundary.toImage()` screens to PNG.
 
 ---
@@ -361,7 +392,8 @@ Use `sqfliteFfiInit()` + `LocalDatabase(factory: databaseFactoryFfi[NoIsolate], 
 ## 8. Known gaps / quirks (useful when adding features)
 - Tax can't be attached to owes (only income/expense). Linked tax always uses the transaction's account and date.
 - Owes: no partial repayments (settle is all-or-nothing).
-- No data export/backup/restore; uninstall loses data. No app lock.
+- Excel import/export exists (entries only). No full backup/restore of settings, categories' icons/colors, assets or defaults; uninstall loses data. No app lock.
+- Import isn't atomic: rows are saved one by one; a failed row is reported and the rest are kept.
 - Production setup not done: `applicationId com.example.money_tracker`, debug signing, default launcher icon, version 0.1.0.
 - History loads the whole feed into memory and filters there (fine for personal-scale data; move filters into SQL if it grows to many thousands).
 - Transaction type can't be changed when editing.
@@ -385,5 +417,6 @@ Use `sqfliteFfiInit()` + `LocalDatabase(factory: databaseFactoryFfi[NoIsolate], 
 - **New entity:** model in `data/models` (+ `part`, run build_runner) → table in `_createSchema` + migration in `_upgradeSchema` (bump version) → repo extending `CrudRepository` → field on `AppServices` → controller extending `BaseController` (call `services.changed()` after writes) → screen with `AnimatedBuilder(controller)` → navigation entry → tests.
 - **New default:** add a `DefaultKind` constant, a section in `DefaultsScreen`, and apply it in the relevant controller's first `refresh()` for new entries only.
 - **New setting:** key in `app_settings` via `SettingsService` getter/setter (insert-replace) → mirror on `AppServices` if global → `SettingsController` + a tile in `SettingsScreen` Preferences (picker sheet or SegmentedButton).
+- **New Excel column:** add to `TxColumn` (header + aliases) and `TxRow`, write it in `_cell` and read it in `_parseRow` (xlsx_codec.dart), map it in `AppTransactionIoStore.readRows/writeRows`, extend the module round-trip test.
 - **New money field:** store as `int` minor; parse with `MoneyAmount.parse`; display with `AmountText`/`money()`; prefill inputs with `amountInputText()`.
 - **Affects balances?** Update `AccountRepository.balanceMinor` AND `DashboardService` AND `ReportService` (totals + `_accountFlows`) AND `ActivityService` (`netEffectMinor`/`effectOn`) consistently.

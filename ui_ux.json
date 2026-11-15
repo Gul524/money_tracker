@@ -183,12 +183,13 @@
     "transferForm": "Big amount → From/To with swap button → Date + Note → explanation → pinned Transfer. Edit mode: 'Edit transfer', Save, delete icon",
     "history": "Search (name, note, account or amount) → Filters chip with count badge + type chips (All, Expenses, Income, Transfers, Owed, Tax) → active filter chips (account, category, dates; × to clear) → result card (N entries · In · Out) → groups by day with daily net. Filter sheet: Account, Category (includes subcategories), Date (Any time, This month, Last month, Last 3 months, This year, Custom dates). Every row opens its editor",
     "reports": "Period segments (Month, 6 months, Year, Custom) → ‹ range › bar (custom: Change dates) → Net for this period with income/expense/tax bar and entry count → Month by month bar chart (multi-month periods) → Spending / Income by category rolled up to parent with subcategory lines (tap → filtered History) → Tax paid (total, % of income, by account) → Accounts (in, out, net; tap → account page) → Money owed settled → Where you stand today + Net worth",
-    "settings": "Preferences (Currency picker, Appearance segmented System/Light/Dark) → Manage (Accounts, Categories, Money owed, Assets) → About",
+    "settings": "Preferences (Currency, Defaults for new entries, Appearance) → Manage (Accounts, Categories, Money owed, Assets) → Data (Import and export) → About",
     "accounts": "Total card, Active and Archived groups; tap → account page",
     "assets": "Total value card, assets with gain/loss; sheet (name, price paid, worth today, bought on, notes, delete)",
     "categories": "Expenses / Income / Both sections, indented tree with colored category badges; sheet: live badge preview + name, used-for segmented, Icon (grouped icon grid, or Automatic), Color (any color: saturation/brightness panel, hue slider, hex input, quick swatches; stored as #RRGGBB), Inside parent picker, delete",
     "owe": "Owed to you / You owe sections with totals; overdue in red; tap → Mark as received/paid sheet with account choice and Edit details",
-    "accountDetail": "Balance card (type, archived pill, starting balance) → This month Money in / Money out → Activity grouped by day with transfers shown ± for this account → Search opens History filtered to the account. Edit icon opens the account sheet (name, Cash/Bank, starting balance, archive, delete)"
+    "accountDetail": "Balance card (type, archived pill, starting balance) → This month Money in / Money out → Activity grouped by day with transfers shown ± for this account → Search opens History filtered to the account. Edit icon opens the account sheet (name, Cash/Bank, starting balance, archive, delete)",
+    "importExport": "Settings › Data › Import and export: Export to Excel (Month / 6 months / Year / Custom, ‹ range ›, entry count, Export button → save dialog), column list note; Import from Excel (explanation, Choose Excel file, Save a blank template); Last import card (Imported, Skipped as duplicates, Problems + row messages)"
   },
   "interactionRules": [
     "Saving from the Add flow shows a 'Saved' snackbar",
