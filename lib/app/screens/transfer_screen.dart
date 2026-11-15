@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../data/models/account_transfer.dart';
 import '../../data/models/model_types.dart';
 import '../app_services.dart';
 import '../app_sizes.dart';
@@ -7,21 +8,30 @@ import '../app_theme.dart';
 import '../controllers/transfer_controller.dart';
 import '../widgets/app_widgets.dart';
 
+/// Move money between two of the user's accounts, or edit a transfer.
 class TransferScreen extends StatefulWidget {
-  const TransferScreen({super.key, required this.services});
+  const TransferScreen({super.key, required this.services, this.existing});
   final AppServices services;
+  final AccountTransfer? existing;
   @override
   State<TransferScreen> createState() => _TransferScreenState();
 }
 
 class _TransferScreenState extends State<TransferScreen> {
   late final TransferController controller;
-  final amount = TextEditingController();
+  late final TextEditingController amount;
+  bool get _editing => widget.existing != null;
 
   @override
   void initState() {
     super.initState();
-    controller = TransferController(widget.services);
+    controller = TransferController(widget.services, existing: widget.existing);
+    amount = TextEditingController(text: controller.amountText);
+  }
+
+  Future<void> _delete() async {
+    if (!await confirmDelete(context, title: 'Delete this transfer?')) return;
+    if (await controller.remove() && mounted) Navigator.of(context).pop(true);
   }
 
   @override
@@ -69,7 +79,17 @@ class _TransferScreenState extends State<TransferScreen> {
     builder: (context, _) {
       final colors = AppColors.of(context);
       return Scaffold(
-        appBar: AppBar(title: const Text('Transfer money')),
+        appBar: AppBar(
+          title: Text(_editing ? 'Edit transfer' : 'Transfer money'),
+          actions: [
+            if (_editing)
+              IconButton(
+                tooltip: 'Delete',
+                icon: const Icon(Icons.delete_outline_rounded),
+                onPressed: controller.busy ? null : _delete,
+              ),
+          ],
+        ),
         body: ListView(
           padding: const EdgeInsets.fromLTRB(
             SpaceSize.gutter,
@@ -82,7 +102,7 @@ class _TransferScreenState extends State<TransferScreen> {
               controller: amount,
               currency: widget.services.currencyCode,
               color: colors.transfer,
-              autofocus: true,
+              autofocus: !_editing,
               onChanged: controller.setAmount,
             ),
             const SizedBox(height: SpaceSize.section),
@@ -146,7 +166,7 @@ class _TransferScreenState extends State<TransferScreen> {
         bottomNavigationBar: BottomActionBar(
           child: FilledButton(
             onPressed: controller.busy ? null : _save,
-            child: const Text('Transfer'),
+            child: Text(_editing ? 'Save' : 'Transfer'),
           ),
         ),
       );

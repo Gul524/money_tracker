@@ -140,4 +140,75 @@ class TransactionRepository extends CrudRepository<MoneyTransaction> {
     );
     return rows.map(fromRow).toList();
   }
+
+  /// Creates or updates [value] and, in the same database transaction, its
+  /// linked tax payment. [taxMinor] of 0 removes any linked tax. Tax is paid
+  /// from the transaction's account on the transaction's date.
+  Future<MoneyTransaction> saveWithTax(
+    MoneyTransaction value, {
+    int taxMinor = 0,
+  }) async {
+    if (taxMinor < 0) throw ArgumentError('Tax cannot be negative');
+    final isOwe =
+        value.type == TransactionType.oweIn ||
+        value.type == TransactionType.oweOut;
+    if (taxMinor > 0 && isOwe) {
+      throw ArgumentError('Tax can only be added to income or expense');
+    }
+    await validate(value, updatingId: value.id);
+    final db = await storage.database;
+    return db.transaction((txn) async {
+      final row = toRow(value);
+      final int id;
+      if (value.id == null) {
+        id = await txn.insert(table, row..remove('id'));
+      } else {
+        id = value.id!;
+        final count = await txn.update(
+          table,
+          row,
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+        if (count == 0) throw StateError('$table row $id does not exist');
+      }
+      if (taxMinor == 0) {
+        await txn.delete(
+          'tax_payments',
+          where: 'transaction_id = ?',
+          whereArgs: [id],
+        );
+      } else {
+        final tax = {
+          'amount_minor': taxMinor,
+          'paid_at': value.occurredAt.toIso8601String(),
+          'account_id': value.accountId,
+          'transaction_id': id,
+        };
+        final updated = await txn.update(
+          'tax_payments',
+          tax,
+          where: 'transaction_id = ?',
+          whereArgs: [id],
+        );
+        if (updated == 0) await txn.insert('tax_payments', tax);
+      }
+      return withId(value, id);
+    });
+  }
+
+  /// Deletes the transaction and any tax recorded with it.
+  @override
+  Future<void> delete(int id) async {
+    final db = await storage.database;
+    await db.transaction((txn) async {
+      await txn.delete(
+        'tax_payments',
+        where: 'transaction_id = ?',
+        whereArgs: [id],
+      );
+      final count = await txn.delete(table, where: 'id = ?', whereArgs: [id]);
+      if (count == 0) throw StateError('$table row $id does not exist');
+    });
+  }
 }

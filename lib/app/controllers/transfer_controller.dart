@@ -1,12 +1,22 @@
 import '../../data/models/account.dart';
 import '../../data/models/account_transfer.dart';
+import '../formatters.dart';
 import 'base_controller.dart';
 import 'money_amount.dart';
 
 class TransferController extends BaseController {
-  TransferController(super.services) {
+  TransferController(super.services, {AccountTransfer? existing})
+    : editing = existing {
+    if (existing != null) {
+      fromAccountId = existing.fromAccountId;
+      toAccountId = existing.toAccountId;
+      amountText = amountInputText(existing.amountMinor);
+      note = existing.note ?? '';
+      occurredAt = existing.occurredAt;
+    }
     refresh();
   }
+  final AccountTransfer? editing;
   List<Account> accounts = [];
   Map<int, int> balances = {};
   int? fromAccountId;
@@ -18,8 +28,12 @@ class TransferController extends BaseController {
   @override
   void refresh() {
     run(() async {
+      // Archived accounts are hidden, except ones this transfer already uses.
       accounts = (await services.accounts.getAll())
-          .where((a) => !a.isArchived)
+          .where(
+            (a) =>
+                !a.isArchived || a.id == fromAccountId || a.id == toAccountId,
+          )
           .toList();
       balances = {
         for (final a in accounts)
@@ -66,15 +80,27 @@ class TransferController extends BaseController {
           throw ArgumentError('Choose both accounts');
         }
         final amount = MoneyAmount.parse(amountText);
-        await services.transfers.create(
-          AccountTransfer(
-            fromAccountId: fromAccountId!,
-            toAccountId: toAccountId!,
-            amountMinor: amount,
-            occurredAt: occurredAt,
-            note: note.trim(),
-          ),
+        final transfer = AccountTransfer(
+          id: editing?.id,
+          fromAccountId: fromAccountId!,
+          toAccountId: toAccountId!,
+          amountMinor: amount,
+          occurredAt: occurredAt,
+          note: note.trim(),
         );
+        if (editing == null) {
+          await services.transfers.create(transfer);
+        } else {
+          await services.transfers.update(transfer);
+        }
+        services.changed();
+        return true;
+      }) ==
+      true;
+
+  Future<bool> remove() async =>
+      await run(() async {
+        await services.transfers.delete(editing!.id!);
         services.changed();
         return true;
       }) ==

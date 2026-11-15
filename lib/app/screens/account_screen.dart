@@ -6,6 +6,7 @@ import '../app_services.dart';
 import '../app_sizes.dart';
 import '../controllers/account_controller.dart';
 import '../widgets/app_widgets.dart';
+import 'account_detail_screen.dart';
 
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key, required this.services});
@@ -29,108 +30,19 @@ class _AccountScreenState extends State<AccountScreen> {
     super.dispose();
   }
 
-  Future<void> _edit([Account? existing]) async {
-    controller.clearError();
-    var name = existing?.name ?? '';
-    var type = existing?.type ?? AccountType.cash;
-    final openingMinor = existing?.openingBalanceMinor ?? 0;
-    var opening = openingMinor == 0
-        ? ''
-        : '${openingMinor < 0 ? '-' : ''}${amountInputText(openingMinor.abs())}';
-    var archived = existing?.isArchived ?? false;
+  void _edit([Account? existing]) => showAccountEditor(
+    context,
+    services: widget.services,
+    controller: controller,
+    existing: existing,
+  );
 
-    await showAppSheet<void>(
-      context,
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (context, setSheetState) => AnimatedBuilder(
-          animation: controller,
-          builder: (context, _) => SheetScaffold(
-            title: existing == null ? 'New account' : 'Edit account',
-            error: controller.error,
-            busy: controller.busy,
-            primaryLabel: 'Save',
-            onPrimary: () async {
-              final ok = await controller.save(
-                id: existing?.id,
-                name: name,
-                type: type,
-                openingBalance: opening.trim().isEmpty ? '0' : opening,
-                isArchived: archived,
-              );
-              if (ok && sheetContext.mounted) Navigator.pop(sheetContext);
-            },
-            destructiveLabel: existing == null ? null : 'Delete account',
-            onDestructive: () async {
-              final confirmed = await confirmDelete(
-                context,
-                title: 'Delete ${existing!.name}?',
-                message:
-                    'Accounts with recorded activity can’t be deleted. '
-                    'Archive them instead to hide them.',
-              );
-              if (confirmed &&
-                  await controller.remove(existing.id!) &&
-                  sheetContext.mounted) {
-                Navigator.pop(sheetContext);
-              }
-            },
-            children: [
-              AppTextField(
-                label: 'Account name',
-                hint: 'e.g. Wallet, HBL Current',
-                value: name,
-                capitalization: TextCapitalization.words,
-                onChanged: (v) => name = v,
-              ),
-              const SizedBox(height: SpaceSize.large),
-              SegmentedButton<AccountType>(
-                segments: const [
-                  ButtonSegment(
-                    value: AccountType.cash,
-                    label: Text('Cash'),
-                    icon: Icon(Icons.payments_outlined),
-                  ),
-                  ButtonSegment(
-                    value: AccountType.bank,
-                    label: Text('Bank'),
-                    icon: Icon(Icons.account_balance_outlined),
-                  ),
-                ],
-                selected: {type},
-                onSelectionChanged: (v) => setSheetState(() => type = v.first),
-              ),
-              const SizedBox(height: SpaceSize.large),
-              AppTextField(
-                label: 'Starting balance',
-                hint: '0',
-                prefixText: '${currencySymbol(widget.services.currencyCode)} ',
-                helper:
-                    'How much was in this account when you started tracking.',
-                value: opening,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                  signed: true,
-                ),
-                onChanged: (v) => opening = v,
-              ),
-              if (existing != null) ...[
-                const SizedBox(height: SpaceSize.small),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Archive account'),
-                  subtitle: const Text(
-                    'Hide it when adding new entries. History is kept.',
-                  ),
-                  value: archived,
-                  onChanged: (v) => setSheetState(() => archived = v),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  void _openDetail(Account a) => Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) =>
+          AccountDetailScreen(services: widget.services, accountId: a.id!),
+    ),
+  );
 
   Widget _tile(Account a) => AppTile(
     leading: IconBadge(
@@ -149,7 +61,7 @@ class _AccountScreenState extends State<AccountScreen> {
           ? AmountTone.expense
           : AmountTone.neutral,
     ),
-    onTap: () => _edit(a),
+    onTap: () => _openDetail(a),
   );
 
   @override
@@ -214,4 +126,116 @@ class _AccountScreenState extends State<AccountScreen> {
       );
     },
   );
+}
+
+/// Opens the add/edit account sheet. Returns true when the account was
+/// deleted.
+Future<bool> showAccountEditor(
+  BuildContext context, {
+  required AppServices services,
+  required AccountController controller,
+  Account? existing,
+}) async {
+  var deleted = false;
+  controller.clearError();
+  var name = existing?.name ?? '';
+  var type = existing?.type ?? AccountType.cash;
+  final openingMinor = existing?.openingBalanceMinor ?? 0;
+  var opening = openingMinor == 0
+      ? ''
+      : '${openingMinor < 0 ? '-' : ''}${amountInputText(openingMinor.abs())}';
+  var archived = existing?.isArchived ?? false;
+
+  await showAppSheet<void>(
+    context,
+    builder: (sheetContext) => StatefulBuilder(
+      builder: (context, setSheetState) => AnimatedBuilder(
+        animation: controller,
+        builder: (context, _) => SheetScaffold(
+          title: existing == null ? 'New account' : 'Edit account',
+          error: controller.error,
+          busy: controller.busy,
+          primaryLabel: 'Save',
+          onPrimary: () async {
+            final ok = await controller.save(
+              id: existing?.id,
+              name: name,
+              type: type,
+              openingBalance: opening.trim().isEmpty ? '0' : opening,
+              isArchived: archived,
+            );
+            if (ok && sheetContext.mounted) Navigator.pop(sheetContext);
+          },
+          destructiveLabel: existing == null ? null : 'Delete account',
+          onDestructive: () async {
+            final confirmed = await confirmDelete(
+              context,
+              title: 'Delete ${existing!.name}?',
+              message:
+                  'Accounts with recorded activity can’t be deleted. '
+                  'Archive them instead to hide them.',
+            );
+            if (confirmed &&
+                await controller.remove(existing.id!) &&
+                sheetContext.mounted) {
+              deleted = true;
+              Navigator.pop(sheetContext);
+            }
+          },
+          children: [
+            AppTextField(
+              label: 'Account name',
+              hint: 'e.g. Wallet, HBL Current',
+              value: name,
+              capitalization: TextCapitalization.words,
+              onChanged: (v) => name = v,
+            ),
+            const SizedBox(height: SpaceSize.large),
+            SegmentedButton<AccountType>(
+              segments: const [
+                ButtonSegment(
+                  value: AccountType.cash,
+                  label: Text('Cash'),
+                  icon: Icon(Icons.payments_outlined),
+                ),
+                ButtonSegment(
+                  value: AccountType.bank,
+                  label: Text('Bank'),
+                  icon: Icon(Icons.account_balance_outlined),
+                ),
+              ],
+              selected: {type},
+              onSelectionChanged: (v) => setSheetState(() => type = v.first),
+            ),
+            const SizedBox(height: SpaceSize.large),
+            AppTextField(
+              label: 'Starting balance',
+              hint: '0',
+              prefixText: '${currencySymbol(services.currencyCode)} ',
+              helper: 'How much was in this account when you started tracking.',
+              value: opening,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+                signed: true,
+              ),
+              onChanged: (v) => opening = v,
+            ),
+            if (existing != null) ...[
+              const SizedBox(height: SpaceSize.small),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Archive account'),
+                subtitle: const Text(
+                  'Hide it when adding new entries. History is kept.',
+                ),
+                value: archived,
+                onChanged: (v) => setSheetState(() => archived = v),
+              ),
+            ],
+          ],
+        ),
+      ),
+    ),
+  );
+  return deleted;
 }

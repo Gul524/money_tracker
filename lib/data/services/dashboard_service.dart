@@ -14,8 +14,10 @@ class CategoryTotal {
     required this.name,
     required this.isIncome,
     required this.totalMinor,
+    this.parentId,
   });
   final int categoryId;
+  final int? parentId;
   final String name;
   final bool isIncome;
   final int totalMinor;
@@ -96,13 +98,24 @@ class DashboardService {
 
   /// Income and expense totals per category for the month containing [month],
   /// largest first. Owes are excluded because they are not income/expense.
-  Future<List<CategoryTotal>> categoryTotals(DateTime month) async {
-    final start = DateTime(month.year, month.month).toIso8601String();
-    final end = DateTime(month.year, month.month + 1).toIso8601String();
+  Future<List<CategoryTotal>> categoryTotals(DateTime month) =>
+      categoryTotalsBetween(
+        DateTime(month.year, month.month),
+        DateTime(month.year, month.month + 1),
+      );
+
+  /// Income and expense totals per category for `from <= date < to`.
+  Future<List<CategoryTotal>> categoryTotalsBetween(
+    DateTime from,
+    DateTime to,
+  ) async {
+    final start = from.toIso8601String();
+    final end = to.toIso8601String();
     final db = await storage.database;
     final rows = await db.rawQuery(
       '''
-      SELECT t.category_id AS id, c.name AS name, t.type AS type,
+      SELECT t.category_id AS id, c.name AS name, c.parent_id AS parent_id,
+        t.type AS type,
         SUM(t.amount_minor) AS total
       FROM transactions t JOIN categories c ON c.id = t.category_id
       WHERE t.type IN ('income', 'expense')
@@ -117,6 +130,7 @@ class DashboardService {
         CategoryTotal(
           categoryId: row['id'] as int,
           name: row['name'] as String,
+          parentId: row['parent_id'] as int?,
           isIncome: row['type'] == 'income',
           totalMinor: row['total'] as int,
         ),

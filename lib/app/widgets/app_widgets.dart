@@ -283,6 +283,9 @@ class FormTextRow extends StatelessWidget {
     required this.onChanged,
     this.maxLines = 1,
     this.capitalization = TextCapitalization.sentences,
+    this.amount = false,
+    this.prefixText,
+    this.suffixText,
   });
   final IconData icon;
   final String hint;
@@ -290,6 +293,13 @@ class FormTextRow extends StatelessWidget {
   final ValueChanged<String> onChanged;
   final int maxLines;
   final TextCapitalization capitalization;
+
+  /// Numeric keyboard limited to 2 decimals.
+  final bool amount;
+  final String? prefixText;
+
+  /// Stays visible after typing, so the row keeps its meaning.
+  final String? suffixText;
 
   @override
   Widget build(BuildContext context) {
@@ -317,9 +327,21 @@ class FormTextRow extends StatelessWidget {
               minLines: 1,
               maxLines: maxLines,
               textCapitalization: capitalization,
+              keyboardType: amount
+                  ? const TextInputType.numberWithOptions(decimal: true)
+                  : null,
+              inputFormatters: amount
+                  ? [
+                      FilteringTextInputFormatter.allow(
+                        RegExp(r'^\d*\.?\d{0,2}'),
+                      ),
+                    ]
+                  : null,
               style: theme.textTheme.bodyLarge,
               decoration: InputDecoration(
                 hintText: hint,
+                prefixText: prefixText,
+                suffixText: suffixText,
                 filled: false,
                 border: InputBorder.none,
                 enabledBorder: InputBorder.none,
@@ -499,11 +521,16 @@ class ActivityTile extends StatelessWidget {
     required this.currency,
     this.onTap,
     this.showDate = true,
+    this.accountId,
   });
   final ActivityItem item;
   final String currency;
   final VoidCallback? onTap;
   final bool showDate;
+
+  /// When shown inside one account, transfers display as +/− for it and the
+  /// account name is left out.
+  final int? accountId;
 
   @override
   Widget build(BuildContext context) {
@@ -539,9 +566,13 @@ class ActivityTile extends StatelessWidget {
         ),
       },
     };
-    final tone = item.isPending || item.kind == ActivityKind.transfer
+    final isTransfer = item.kind == ActivityKind.transfer;
+    final amount = isTransfer && accountId != null
+        ? item.effectOn(accountId!)
+        : item.amountMinor;
+    final tone = item.isPending || isTransfer
         ? AmountTone.muted
-        : item.amountMinor > 0
+        : amount > 0
         ? AmountTone.income
         : AmountTone.neutral;
     final party = t?.party?.trim() ?? '';
@@ -550,8 +581,11 @@ class ActivityTile extends StatelessWidget {
     // For money owed, the person matters more than the category.
     final title = isOwe && party.isNotEmpty ? party : item.title;
     final detail = [
-      item.subtitle,
+      if (isTransfer) item.accountName ?? item.subtitle else item.subtitle,
       if (isOwe && party.isNotEmpty) item.title,
+      if (!isTransfer && accountId == null && item.accountName != null)
+        item.accountName!,
+      if (item.taxMinor > 0) 'Tax ${money(item.taxMinor, currency)}',
       if (showDate) relativeDay(item.date),
     ].join(' · ');
 
@@ -566,10 +600,10 @@ class ActivityTile extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           AmountText(
-            item.amountMinor,
+            amount,
             currency: currency,
             tone: tone,
-            signed: item.kind != ActivityKind.transfer,
+            signed: !isTransfer || accountId != null,
           ),
           if (item.isPending)
             Padding(

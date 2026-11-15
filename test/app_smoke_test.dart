@@ -5,6 +5,10 @@ import 'package:money_tracker/app/app_theme.dart';
 import 'package:money_tracker/app/screens/app_shell.dart';
 import 'package:money_tracker/app/screens/reports_screen.dart';
 import 'package:money_tracker/app/screens/settings_screen.dart';
+import 'package:money_tracker/app/screens/account_detail_screen.dart';
+import 'package:money_tracker/data/models/account.dart';
+import 'package:money_tracker/data/models/account_transfer.dart';
+import 'package:money_tracker/data/models/model_types.dart';
 import 'package:money_tracker/data/services/local_database.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -118,6 +122,13 @@ void main() {
     await tester.pumpAndSettle();
     // The seeded Cash account is the only one, so it is preselected.
     expect(find.text('Cash'), findsOneWidget);
+    final taxField = find.ancestor(
+      of: find.text('Tax paid (optional)'),
+      matching: find.byType(TextField),
+    );
+    await tester.enterText(taxField, '100');
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Rs 1,350.50 leaves Cash'), findsOneWidget);
 
     await tester.tap(find.text('Save'));
     await _settle(tester);
@@ -127,9 +138,10 @@ void main() {
     final history = await tester.runAsync(services.activity.history);
     expect(history!.single.amountMinor, -125050);
     expect(history.single.title, 'Food');
+    expect(history.single.taxMinor, 10000);
     expect(
       await tester.runAsync(() => services.accounts.balanceMinor(1)),
-      -125050,
+      -135050,
     );
   });
 
@@ -186,5 +198,72 @@ void main() {
     services.themeMode = ThemeMode.dark;
     await tester.runAsync(services.initialize);
     expect(services.themeMode, ThemeMode.system);
+  });
+
+  testWidgets('history filters, editing transfers, reports and accounts', (
+    tester,
+  ) async {
+    _phoneSize(tester);
+    final services = _services();
+    addTearDown(services.close);
+    await tester.runAsync(() async {
+      await services.initialize();
+      final bank = await services.accounts.create(
+        const Account(name: 'Bank', type: AccountType.bank),
+      );
+      await services.transfers.create(
+        AccountTransfer(
+          fromAccountId: 1,
+          toAccountId: bank.id!,
+          amountMinor: 50000,
+          occurredAt: DateTime.now(),
+        ),
+      );
+    });
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: AppShell(services: services),
+      ),
+    );
+    await _settle(tester);
+
+    await tester.tap(_nav('History'));
+    await _settle(tester);
+    await tester.tap(find.text('Filters'));
+    await tester.pumpAndSettle();
+    expect(find.text('Filter activity'), findsOneWidget);
+    await tester.tap(find.text('This month'));
+    await tester.pumpAndSettle();
+    expect(find.text('Show 1 results'), findsOneWidget);
+    await tester.tap(find.text('Show 1 results'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Cash → Bank'));
+    await _settle(tester);
+    expect(find.text('Edit transfer'), findsOneWidget);
+    expect(find.byTooltip('Delete'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    await tester.tap(_nav('Reports'));
+    await _settle(tester);
+    await tester.tap(find.text('Year'));
+    await _settle(tester);
+    expect(find.text('${DateTime.now().year}'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('No tax paid in this period.'),
+      300,
+    );
+    expect(find.text('No tax paid in this period.'), findsOneWidget);
+
+    await tester.tap(_nav('Home'));
+    await _settle(tester);
+    await tester.scrollUntilVisible(find.text('Bank').first, 300);
+    await tester.tap(find.text('Bank').first);
+    await _settle(tester);
+    expect(find.byType(AccountDetailScreen), findsOneWidget);
+    expect(find.text('Bank account balance'), findsOneWidget);
+    expect(find.text('+Rs 500.00'), findsWidgets);
   });
 }

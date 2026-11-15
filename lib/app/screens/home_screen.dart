@@ -11,7 +11,8 @@ import 'account_screen.dart';
 import 'add_entry_sheet.dart';
 import 'asset_screen.dart';
 import 'owe_screen.dart';
-import 'transaction_screen.dart';
+import 'account_detail_screen.dart';
+import 'activity_list.dart';
 
 /// Dashboard. Content is ordered by what people check most: total balance,
 /// this month's flow, money owed, accounts, then recent activity.
@@ -110,7 +111,16 @@ class _HomeScreenState extends State<HomeScreen> {
                         onAction: () =>
                             _open(AccountScreen(services: services)),
                       ),
-                      _AccountsCard(summary: summary, currency: currency),
+                      _AccountsCard(
+                        summary: summary,
+                        currency: currency,
+                        onOpen: (id) => _open(
+                          AccountDetailScreen(
+                            services: services,
+                            accountId: id,
+                          ),
+                        ),
+                      ),
                       SectionHeader(
                         'Recent activity',
                         actionLabel: 'See all',
@@ -131,14 +141,8 @@ class _HomeScreenState extends State<HomeScreen> {
                               ActivityTile(
                                 item: item,
                                 currency: currency,
-                                onTap: item.transaction == null
-                                    ? null
-                                    : () => _open(
-                                        TransactionScreen(
-                                          services: services,
-                                          existing: item.transaction,
-                                        ),
-                                      ),
+                                onTap: () =>
+                                    openActivity(context, services, item),
                               ),
                           ],
                         ),
@@ -474,9 +478,14 @@ class _OweSummary extends StatelessWidget {
 }
 
 class _AccountsCard extends StatelessWidget {
-  const _AccountsCard({required this.summary, required this.currency});
+  const _AccountsCard({
+    required this.summary,
+    required this.currency,
+    required this.onOpen,
+  });
   final DashboardSummary summary;
   final String currency;
+  final ValueChanged<int> onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -508,6 +517,7 @@ class _AccountsCard extends StatelessWidget {
                   ? AmountTone.expense
                   : AmountTone.neutral,
             ),
+            onTap: () => onOpen(a.account.id!),
           ),
       ],
     );

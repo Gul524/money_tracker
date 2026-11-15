@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../data/models/model_types.dart';
 import '../../data/models/money_transaction.dart';
+import '../../data/models/tax_payment.dart';
 import '../app_services.dart';
 import '../app_sizes.dart';
 import '../app_theme.dart';
@@ -9,16 +10,21 @@ import '../controllers/transaction_controller.dart';
 import '../widgets/app_widgets.dart';
 import 'category_screen.dart';
 
-/// Add or edit an income, expense, owe, or (add only) tax payment.
+/// Add or edit an income, expense, owe or tax payment. Income and expense
+/// can also record tax paid with them.
 class TransactionScreen extends StatefulWidget {
   const TransactionScreen({
     super.key,
     required this.services,
     this.existing,
+    this.existingTax,
     this.initialKind = EntryKind.expense,
   });
   final AppServices services;
   final MoneyTransaction? existing;
+
+  /// A standalone tax payment to edit.
+  final TaxPayment? existingTax;
   final EntryKind initialKind;
   @override
   State<TransactionScreen> createState() => _TransactionScreenState();
@@ -36,7 +42,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
   late final TransactionController controller;
   late final TextEditingController amount;
 
-  bool get _editing => widget.existing != null;
+  bool get _editing => widget.existing != null || widget.existingTax != null;
 
   @override
   void initState() {
@@ -44,6 +50,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
     controller = TransactionController(
       widget.services,
       existing: widget.existing,
+      existingTax: widget.existingTax,
       initialKind: widget.initialKind,
     );
     amount = TextEditingController(text: controller.amountText);
@@ -74,8 +81,31 @@ class _TransactionScreenState extends State<TransactionScreen> {
   }
 
   Future<void> _delete() async {
-    if (!await confirmDelete(context, title: 'Delete this entry?')) return;
+    final linkedTax = controller.canHaveTax && controller.taxMinor > 0;
+    if (!await confirmDelete(
+      context,
+      title: 'Delete this entry?',
+      message: linkedTax
+          ? 'The tax recorded with it is deleted too. This can’t be undone.'
+          : 'This can’t be undone.',
+    )) {
+      return;
+    }
     if (await controller.remove() && mounted) Navigator.of(context).pop(true);
+  }
+
+  /// Explains how the tax changes the account, e.g. "Rs 1,170.00 leaves
+  /// Cash: Rs 1,000.00 plus Rs 170.00 tax."
+  String _taxSummary(String currency) {
+    final amount = controller.amountMinor ?? 0;
+    final tax = controller.taxMinor;
+    final account = controller.selectedAccount?.name ?? 'the account';
+    if (controller.kind == EntryKind.income) {
+      return '$account receives ${money(amount - tax, currency)}: '
+          '${money(amount, currency)} minus ${money(tax, currency)} tax.';
+    }
+    return '${money(amount + tax, currency)} leaves $account: '
+        '${money(amount, currency)} plus ${money(tax, currency)} tax.';
   }
 
   Future<void> _pickCategory() async {
@@ -234,6 +264,25 @@ class _TransactionScreenState extends State<TransactionScreen> {
               ],
             ),
             const SizedBox(height: SpaceSize.medium),
+            if (controller.canHaveTax) ...[
+              GroupedCard(
+                dividerIndent: 56,
+                children: [
+                  FormTextRow(
+                    // Rebuild once an edited entry's saved tax has loaded.
+                    key: ValueKey('tax-${controller.taxLoaded}'),
+                    icon: Icons.receipt_long_outlined,
+                    hint: 'Tax paid (optional)',
+                    value: controller.taxText,
+                    onChanged: controller.setTax,
+                    amount: true,
+                    prefixText: '${currencySymbol(currency)} ',
+                    suffixText: 'tax paid',
+                  ),
+                ],
+              ),
+              const SizedBox(height: SpaceSize.medium),
+            ],
             GroupedCard(
               dividerIndent: 56,
               children: [
@@ -261,6 +310,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
                 'Owed money doesn’t change your balance until you mark it as '
                 'paid from the Money owed screen.',
               ),
+            if (controller.canHaveTax && controller.taxMinor > 0)
+              InfoNote(_taxSummary(currency)),
             if (controller.isTax)
               const InfoNote(
                 'Tax is deducted from the chosen account and shown separately '

@@ -17,7 +17,7 @@ class LocalDatabase {
     _database = await _factory.openDatabase(
       databasePath,
       options: OpenDatabaseOptions(
-        version: 3,
+        version: 4,
         onConfigure: (db) async => db.execute('PRAGMA foreign_keys = ON'),
         onCreate: _createSchema,
         onUpgrade: _upgradeSchema,
@@ -104,12 +104,14 @@ class LocalDatabase {
         amount_minor INTEGER NOT NULL CHECK(amount_minor > 0),
         paid_at TEXT NOT NULL,
         account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE RESTRICT,
-        note TEXT
+        note TEXT,
+        transaction_id INTEGER REFERENCES transactions(id) ON DELETE CASCADE
       )
     ''');
     await db.execute(
       'CREATE INDEX tax_payments_date_idx ON tax_payments(paid_at)',
     );
+    await _createTaxLinkIndex(db);
     await _createTransfers(db);
     await _createSettings(db);
     await _seedDefaults(db);
@@ -125,7 +127,27 @@ class LocalDatabase {
       await _createSettings(db);
     }
     if (oldVersion < 3) await _seedDefaults(db);
+    if (oldVersion < 4 && await _hasColumnlessTaxTable(db)) {
+      // Tax paid as part of an income/expense entry is linked to it, and is
+      // removed together with that entry.
+      await db.execute(
+        'ALTER TABLE tax_payments ADD COLUMN transaction_id INTEGER '
+        'REFERENCES transactions(id) ON DELETE CASCADE',
+      );
+      await _createTaxLinkIndex(db);
+    }
   }
+
+  Future<bool> _hasColumnlessTaxTable(Database db) async {
+    final columns = await db.rawQuery('PRAGMA table_info(tax_payments)');
+    return columns.isNotEmpty &&
+        !columns.any((c) => c['name'] == 'transaction_id');
+  }
+
+  Future<void> _createTaxLinkIndex(Database db) => db.execute(
+    'CREATE UNIQUE INDEX tax_payments_transaction_idx '
+    'ON tax_payments(transaction_id) WHERE transaction_id IS NOT NULL',
+  );
 
   Future<void> _seedDefaults(Database db) async {
     const categories = {

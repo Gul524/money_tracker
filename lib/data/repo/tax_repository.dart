@@ -14,6 +14,7 @@ class TaxRepository extends CrudRepository<TaxPayment> {
     paidAt: DateTime.parse(row['paid_at'] as String),
     accountId: row['account_id'] as int,
     note: row['note'] as String?,
+    transactionId: row['transaction_id'] as int?,
   );
 
   @override
@@ -23,6 +24,7 @@ class TaxRepository extends CrudRepository<TaxPayment> {
     'paid_at': value.paidAt.toIso8601String(),
     'account_id': value.accountId,
     'note': value.note,
+    'transaction_id': value.transactionId,
   };
 
   @override
@@ -56,5 +58,17 @@ class TaxRepository extends CrudRepository<TaxPayment> {
       limit: limit,
     );
     return rows.map(fromRow).toList();
+  }
+
+  /// The tax recorded together with transaction [transactionId], if any.
+  Future<TaxPayment?> forTransaction(int transactionId) async {
+    final db = await storage.database;
+    final rows = await db.query(
+      table,
+      where: 'transaction_id = ?',
+      whereArgs: [transactionId],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : fromRow(rows.first);
   }
 }

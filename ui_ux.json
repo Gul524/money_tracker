@@ -41,10 +41,22 @@
         "primaryContainer": "#23315C"
       },
       "semantic": {
-        "income": { "light": "#0F8A5F", "dark": "#45CF92" },
-        "expense": { "light": "#D92D20", "dark": "#FF7A6E" },
-        "transfer": { "light": "#2C5BE0", "dark": "#8AA8FF" },
-        "warning": { "light": "#B54708", "dark": "#F5A14A" },
+        "income": {
+          "light": "#0F8A5F",
+          "dark": "#45CF92"
+        },
+        "expense": {
+          "light": "#D92D20",
+          "dark": "#FF7A6E"
+        },
+        "transfer": {
+          "light": "#2C5BE0",
+          "dark": "#8AA8FF"
+        },
+        "warning": {
+          "light": "#B54708",
+          "dark": "#F5A14A"
+        },
         "source": "lib/app/app_theme.dart → AppColors ThemeExtension"
       }
     },
@@ -56,31 +68,85 @@
       "sectionGap": 28,
       "fabClearance": 96
     },
-    "radiusDp": { "small": 8, "medium": 12, "card": 16, "hero": 20, "sheet": 28 },
+    "radiusDp": {
+      "small": 8,
+      "medium": 12,
+      "card": 16,
+      "hero": 20,
+      "sheet": 28
+    },
     "typography": {
-      "heroAmount": { "sizeSp": 32, "weight": 700, "role": "displaySmall", "tabularFigures": true },
-      "amountInput": { "sizeSp": 44, "weight": 700 },
-      "pageTitle": { "role": "SliverAppBar.medium title" },
-      "sectionTitle": { "sizeSp": 16, "weight": 600, "role": "titleMedium" },
-      "rowTitle": { "sizeSp": 16, "weight": 500, "role": "bodyLarge" },
-      "body": { "sizeSp": 14, "role": "bodyMedium" },
-      "supporting": { "sizeSp": 12, "role": "bodySmall", "color": "textSecondary" },
-      "navigationLabel": { "sizeSp": 12, "selectedWeight": 600 }
+      "heroAmount": {
+        "sizeSp": 32,
+        "weight": 700,
+        "role": "displaySmall",
+        "tabularFigures": true
+      },
+      "amountInput": {
+        "sizeSp": 44,
+        "weight": 700
+      },
+      "pageTitle": {
+        "role": "SliverAppBar.medium title"
+      },
+      "sectionTitle": {
+        "sizeSp": 16,
+        "weight": 600,
+        "role": "titleMedium"
+      },
+      "rowTitle": {
+        "sizeSp": 16,
+        "weight": 500,
+        "role": "bodyLarge"
+      },
+      "body": {
+        "sizeSp": 14,
+        "role": "bodyMedium"
+      },
+      "supporting": {
+        "sizeSp": 12,
+        "role": "bodySmall",
+        "color": "textSecondary"
+      },
+      "navigationLabel": {
+        "sizeSp": 12,
+        "selectedWeight": 600
+      }
     },
     "money": "Currency symbol + thousands separators, e.g. Rs 12,345.00, $1,200.00, −Rs 500.00; signed (+/−) in activity lists"
   },
   "navigation": {
     "type": "Material 3 NavigationBar with hairline top border",
     "destinations": [
-      { "id": "home", "label": "Home", "icon": "home_outlined" },
-      { "id": "history", "label": "History", "icon": "receipt_long_outlined" },
-      { "id": "reports", "label": "Reports", "icon": "insights_outlined" },
-      { "id": "settings", "label": "Settings", "icon": "settings_outlined" }
+      {
+        "id": "home",
+        "label": "Home",
+        "icon": "home_outlined"
+      },
+      {
+        "id": "history",
+        "label": "History",
+        "icon": "receipt_long_outlined"
+      },
+      {
+        "id": "reports",
+        "label": "Reports",
+        "icon": "insights_outlined"
+      },
+      {
+        "id": "settings",
+        "label": "Settings",
+        "icon": "settings_outlined"
+      }
     ],
     "tabState": "IndexedStack — tabs keep scroll position",
     "primaryAction": {
       "widget": "FloatingActionButton.extended  '+ Add'",
-      "shownOn": ["home", "history", "owe"],
+      "shownOn": [
+        "home",
+        "history",
+        "owe"
+      ],
       "opens": "addMenu"
     },
     "defaultTab": "home"
@@ -112,15 +178,16 @@
       "Assets and tax"
     ],
     "addMenu": "Bottom sheet 'What would you like to add?': large Expense / Income cards, then Transfer, Someone owes me, I owe someone, Tax payment",
-    "transactionForm": "Type chips (new only) → big amount → [Category, Account, Date, Due date] → [Person, Note] → helper note → pinned Save. Delete icon when editing",
-    "transferForm": "Big amount → From/To with swap button → Date + Note → explanation → pinned Transfer",
-    "history": "Search field, filter chips (All, Expenses, Income, Transfers, Owed, Tax), groups by day (Today/Yesterday/…) with daily net",
-    "reports": "Month switcher → Net for the month card with income/outflow bar → Spending by category (bars + %) → Income by category → Where you stand today + Net worth",
+    "transactionForm": "Type chips (new only) → big amount → [Category, Account, Date, Due date] → [Tax paid (income/expense only, amount + 'tax paid' suffix)] → [Person, Note] → tax summary note ('Rs 1,170.00 leaves Cash…') → pinned Save. Delete icon when editing. Also edits standalone tax payments",
+    "transferForm": "Big amount → From/To with swap button → Date + Note → explanation → pinned Transfer. Edit mode: 'Edit transfer', Save, delete icon",
+    "history": "Search (name, note, account or amount) → Filters chip with count badge + type chips (All, Expenses, Income, Transfers, Owed, Tax) → active filter chips (account, category, dates; × to clear) → result card (N entries · In · Out) → groups by day with daily net. Filter sheet: Account, Category (includes subcategories), Date (Any time, This month, Last month, Last 3 months, This year, Custom dates). Every row opens its editor",
+    "reports": "Period segments (Month, 6 months, Year, Custom) → ‹ range › bar (custom: Change dates) → Net for this period with income/expense/tax bar and entry count → Month by month bar chart (multi-month periods) → Spending / Income by category rolled up to parent with subcategory lines (tap → filtered History) → Tax paid (total, % of income, by account) → Accounts (in, out, net; tap → account page) → Money owed settled → Where you stand today + Net worth",
     "settings": "Preferences (Currency picker, Appearance segmented System/Light/Dark) → Manage (Accounts, Categories, Money owed, Assets) → About",
-    "accounts": "Total card, Active and Archived groups; tap to edit in sheet (name, Cash/Bank segmented, starting balance, archive switch, delete)",
+    "accounts": "Total card, Active and Archived groups; tap → account page",
     "assets": "Total value card, assets with gain/loss; sheet (name, price paid, worth today, bought on, notes, delete)",
     "categories": "Expenses / Income / Both sections, indented tree; sheet (name, used-for segmented, Inside parent picker, delete)",
-    "owe": "Owed to you / You owe sections with totals; overdue in red; tap → Mark as received/paid sheet with account choice and Edit details"
+    "owe": "Owed to you / You owe sections with totals; overdue in red; tap → Mark as received/paid sheet with account choice and Edit details",
+    "accountDetail": "Balance card (type, archived pill, starting balance) → This month Money in / Money out → Activity grouped by day with transfers shown ± for this account → Search opens History filtered to the account. Edit icon opens the account sheet (name, Cash/Bank, starting balance, archive, delete)"
   },
   "interactionRules": [
     "Saving from the Add flow shows a 'Saved' snackbar",
@@ -128,6 +195,9 @@
     "Pickers are bottom sheets; editors are bottom sheets; full forms are pushed pages",
     "A single non-archived account is preselected on new entries",
     "Amount fields accept digits and up to 2 decimals only",
-    "Archived accounts are hidden from pickers but kept in history"
+    "Archived accounts are hidden from pickers but kept in history",
+    "Tax entered on an income or expense is paid from the same account on the same date and deleted with it",
+    "Every History row (transaction, tax, transfer) opens an editor with delete",
+    "Report periods can't step past the current one"
   ]
 }

@@ -12,6 +12,7 @@ TaxPayment _$TaxPaymentFromJson(Map<String, dynamic> json) => TaxPayment(
   paidAt: DateTime.parse(json['paidAt'] as String),
   accountId: (json['accountId'] as num).toInt(),
   note: json['note'] as String?,
+  transactionId: (json['transactionId'] as num?)?.toInt(),
 );
 
 Map<String, dynamic> _$TaxPaymentToJson(TaxPayment instance) =>
@@ -21,4 +22,5 @@ Map<String, dynamic> _$TaxPaymentToJson(TaxPayment instance) =>
       'paidAt': instance.paidAt.toIso8601String(),
       'accountId': instance.accountId,
       'note': instance.note,
+      'transactionId': instance.transactionId,
     };

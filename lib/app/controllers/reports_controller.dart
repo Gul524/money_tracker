@@ -1,38 +1,139 @@
+import '../../data/models/category.dart';
 import '../../data/services/dashboard_service.dart';
+import '../../data/services/report_service.dart';
+import '../date_range.dart';
 import 'base_controller.dart';
+
+enum ReportPeriod { month, sixMonths, year, custom }
+
+/// A top-level category with its subcategories' totals rolled up.
+class CategoryGroup {
+  CategoryGroup({
+    required this.categoryId,
+    required this.name,
+    required this.isIncome,
+  });
+  final int categoryId;
+  final String name;
+  final bool isIncome;
+  int totalMinor = 0;
+
+  /// Totals of the subcategories (and the parent itself) inside this group,
+  /// largest first. Empty when everything was recorded on the parent.
+  final List<(String name, int totalMinor)> parts = [];
+}
 
 class ReportsController extends BaseController {
   ReportsController(super.services, {DateTime? now})
-    : month = _monthOf(now ?? DateTime.now()) {
+    : _now = now,
+      range = DateRange.month(now ?? DateTime.now()) {
     refresh();
   }
 
-  DateTime month;
-  DashboardSummary? summary;
-  List<CategoryTotal> totals = [];
+  final DateTime? _now;
+  ReportPeriod period = ReportPeriod.month;
+  DateRange range;
+  PeriodReport? report;
 
-  static DateTime _monthOf(DateTime d) => DateTime(d.year, d.month);
+  /// Today's position (balances, owes, assets) — not period based.
+  DashboardSummary? position;
+  List<Category> categories = [];
 
-  bool get isCurrentMonth => month == _monthOf(DateTime.now());
-  List<CategoryTotal> get spending => totals.where((t) => !t.isIncome).toList();
-  List<CategoryTotal> get earning => totals.where((t) => t.isIncome).toList();
+  DateTime get _today => _now ?? DateTime.now();
 
   @override
   void refresh() {
     run(() async {
-      summary = await services.dashboard.currentMonth(now: month);
-      totals = await services.dashboard.categoryTotals(month);
+      report = await services.reports.build(range.start, range.end);
+      position = await services.dashboard.currentMonth(now: _today);
+      categories = await services.categories.getAll();
     });
   }
 
-  void previousMonth() {
-    month = DateTime(month.year, month.month - 1);
+  void setPeriod(ReportPeriod value) {
+    if (value == ReportPeriod.custom) return;
+    period = value;
+    range = switch (value) {
+      ReportPeriod.month => DateRange.month(_today),
+      ReportPeriod.sixMonths => DateRange.months(_today, 6),
+      ReportPeriod.year => DateRange.year(_today.year),
+      ReportPeriod.custom => range,
+    };
     refresh();
   }
 
-  void nextMonth() {
-    if (isCurrentMonth) return;
-    month = DateTime(month.year, month.month + 1);
+  void setCustomRange(DateRange value) {
+    period = ReportPeriod.custom;
+    range = value;
     refresh();
+  }
+
+  bool get canStep => period != ReportPeriod.custom;
+
+  /// Whether a later period exists that has started already.
+  bool get canGoNext => canStep && !_shift(1).start.isAfter(_today);
+
+  DateRange _shift(int direction) => switch (period) {
+    ReportPeriod.month => DateRange.month(
+      DateTime(range.start.year, range.start.month + direction),
+    ),
+    ReportPeriod.sixMonths => DateRange(
+      DateTime(range.start.year, range.start.month + 6 * direction),
+      DateTime(range.end.year, range.end.month + 6 * direction),
+    ),
+    ReportPeriod.year => DateRange.year(range.start.year + direction),
+    ReportPeriod.custom => range,
+  };
+
+  void previous() {
+    if (!canStep) return;
+    range = _shift(-1);
+    refresh();
+  }
+
+  void next() {
+    if (!canGoNext) return;
+    range = _shift(1);
+    refresh();
+  }
+
+  List<CategoryGroup> get spending => _groups(income: false);
+  List<CategoryGroup> get earning => _groups(income: true);
+
+  List<CategoryGroup> _groups({required bool income}) {
+    final byId = {for (final c in categories) c.id!: c};
+    Category? rootOf(int id) {
+      var current = byId[id];
+      final seen = <int>{};
+      while (current?.parentId != null && seen.add(current!.id!)) {
+        final parent = byId[current.parentId];
+        if (parent == null) break;
+        current = parent;
+      }
+      return current;
+    }
+
+    final groups = <int, CategoryGroup>{};
+    for (final total in report?.categories ?? const <CategoryTotal>[]) {
+      if (total.isIncome != income) continue;
+      final root = rootOf(total.categoryId);
+      final rootId = root?.id ?? total.categoryId;
+      final group = groups.putIfAbsent(
+        rootId,
+        () => CategoryGroup(
+          categoryId: rootId,
+          name: root?.name ?? total.name,
+          isIncome: income,
+        ),
+      );
+      group.totalMinor += total.totalMinor;
+      group.parts.add((total.name, total.totalMinor));
+    }
+    for (final g in groups.values) {
+      if (g.parts.length == 1 && g.parts.single.$1 == g.name) g.parts.clear();
+      g.parts.sort((a, b) => b.$2.compareTo(a.$2));
+    }
+    return groups.values.toList()
+      ..sort((a, b) => b.totalMinor.compareTo(a.totalMinor));
   }
 }

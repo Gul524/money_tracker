@@ -1,0 +1,421 @@
+import 'dart:io';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:money_tracker/app/app_services.dart';
+import 'package:money_tracker/app/controllers/base_controller.dart';
+import 'package:money_tracker/app/controllers/history_controller.dart';
+import 'package:money_tracker/app/controllers/reports_controller.dart';
+import 'package:money_tracker/app/date_range.dart';
+import 'package:money_tracker/data/models/account.dart';
+import 'package:money_tracker/data/models/account_transfer.dart';
+import 'package:money_tracker/data/models/category.dart';
+import 'package:money_tracker/data/models/model_types.dart';
+import 'package:money_tracker/data/models/money_transaction.dart';
+import 'package:money_tracker/data/models/tax_payment.dart';
+import 'package:money_tracker/data/repo/tax_repository.dart';
+import 'package:money_tracker/data/services/local_database.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+/// Seeded world used by most tests:
+/// accounts Cash (opening 10,000) and Bank (opening 0);
+/// categories Salary (income), Food (expense) with child Groceries.
+class _World {
+  _World(this.services);
+  final AppServices services;
+  late Account cash;
+  late Account bank;
+  late Category salary;
+  late Category food;
+  late Category groceries;
+
+  static Future<_World> create() async {
+    final services = AppServices.withDatabase(
+      LocalDatabase(factory: databaseFactoryFfi, path: inMemoryDatabasePath),
+    );
+    await services.initialize();
+    final w = _World(services);
+    final all = await services.categories.getAll();
+    w.salary = all.firstWhere((c) => c.name == 'Salary');
+    w.food = all.firstWhere((c) => c.name == 'Food');
+    w.groceries = await services.categories.create(
+      Category(
+        name: 'Groceries',
+        type: CategoryType.expense,
+        parentId: w.food.id,
+      ),
+    );
+    w.cash = (await services.accounts.getAll()).single;
+    w.cash = await services.accounts.update(
+      w.cash.copyWith(openingBalanceMinor: 1000000),
+    );
+    w.bank = await services.accounts.create(
+      const Account(name: 'Bank', type: AccountType.bank),
+    );
+    return w;
+  }
+
+  Future<MoneyTransaction> add(
+    TransactionType type,
+    int amount,
+    Category category,
+    Account account,
+    DateTime at, {
+    int tax = 0,
+    String? note,
+  }) => services.transactions.saveWithTax(
+    MoneyTransaction(
+      type: type,
+      amountMinor: amount,
+      categoryId: category.id!,
+      accountId: account.id,
+      occurredAt: at,
+      note: note,
+    ),
+    taxMinor: tax,
+  );
+}
+
+Future<void> _idle(BaseController c) async {
+  await Future<void>.delayed(Duration.zero);
+  while (c.busy) {
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+  }
+}
+
+void main() {
+  sqfliteFfiInit();
+
+  test('tax recorded with a transaction follows it', () async {
+    final w = await _World.create();
+    addTearDown(w.services.close);
+    final at = DateTime(2026, 11, 5);
+
+    final lunch = await w.add(
+      TransactionType.expense,
+      100000,
+      w.food,
+      w.cash,
+      at,
+      tax: 17000,
+    );
+    final pay = await w.add(
+      TransactionType.income,
+      5000000,
+      w.salary,
+      w.bank,
+      at,
+      tax: 500000,
+    );
+    expect(
+      await w.services.accounts.balanceMinor(w.cash.id!),
+      1000000 - 117000,
+    );
+    expect(await w.services.accounts.balanceMinor(w.bank.id!), 4500000);
+    expect(
+      (await w.services.taxes.forTransaction(lunch.id!))!.amountMinor,
+      17000,
+    );
+
+    // Linked tax is shown on its transaction, not as a separate row.
+    final feed = await w.services.activity.history();
+    expect(feed, hasLength(2));
+    expect(
+      feed.firstWhere((i) => i.transaction?.id == lunch.id).taxMinor,
+      17000,
+    );
+    expect(
+      feed.firstWhere((i) => i.transaction?.id == pay.id).netEffectMinor,
+      4500000,
+    );
+
+    // Moving the entry to another account moves its tax too.
+    await w.services.transactions.saveWithTax(
+      lunch.copyWith(accountId: w.bank.id),
+      taxMinor: 20000,
+    );
+    expect(await w.services.accounts.balanceMinor(w.cash.id!), 1000000);
+    expect(
+      await w.services.accounts.balanceMinor(w.bank.id!),
+      4500000 - 120000,
+    );
+
+    // Clearing the tax removes it; deleting the entry removes its tax.
+    await w.services.transactions.saveWithTax(
+      lunch.copyWith(accountId: w.bank.id),
+    );
+    expect(await w.services.taxes.forTransaction(lunch.id!), isNull);
+    await w.services.transactions.delete(pay.id!);
+    expect(await w.services.taxes.getAll(), isEmpty);
+
+    // Owes can't carry tax.
+    await expectLater(
+      w.services.transactions.saveWithTax(
+        MoneyTransaction(
+          type: TransactionType.oweIn,
+          amountMinor: 100,
+          categoryId: w.salary.id!,
+          occurredAt: at,
+          oweStatus: OweStatus.pending,
+        ),
+        taxMinor: 10,
+      ),
+      throwsArgumentError,
+    );
+  });
+
+  test('version 3 databases gain the tax link column', () async {
+    final dir = await Directory.systemTemp.createTemp('money_tracker_v3_');
+    addTearDown(() => dir.delete(recursive: true));
+    final path = '${dir.path}/v3.db';
+    final legacy = await databaseFactoryFfi.openDatabase(
+      path,
+      options: OpenDatabaseOptions(
+        version: 3,
+        onCreate: (db, _) async {
+          await db.execute('''
+            CREATE TABLE accounts (id INTEGER PRIMARY KEY, name TEXT NOT NULL,
+              type TEXT NOT NULL, opening_balance_minor INTEGER NOT NULL DEFAULT 0,
+              is_archived INTEGER NOT NULL DEFAULT 0)
+          ''');
+          await db.execute('''
+            CREATE TABLE tax_payments (id INTEGER PRIMARY KEY AUTOINCREMENT,
+              amount_minor INTEGER NOT NULL, paid_at TEXT NOT NULL,
+              account_id INTEGER NOT NULL, note TEXT)
+          ''');
+          await db.insert('accounts', {'name': 'Cash', 'type': 'cash'});
+          await db.insert('tax_payments', {
+            'amount_minor': 500,
+            'paid_at': DateTime(2026).toIso8601String(),
+            'account_id': 1,
+          });
+        },
+      ),
+    );
+    await legacy.close();
+
+    final storage = LocalDatabase(factory: databaseFactoryFfi, path: path);
+    addTearDown(storage.close);
+    final tax = (await TaxRepository(storage).getAll()).single;
+    expect(tax.amountMinor, 500);
+    expect(tax.transactionId, isNull);
+    final columns = await (await storage.database).rawQuery(
+      'PRAGMA table_info(tax_payments)',
+    );
+    expect(columns.map((c) => c['name']), contains('transaction_id'));
+  });
+
+  test('period report totals, accounts, tax and months', () async {
+    final w = await _World.create();
+    addTearDown(w.services.close);
+    await w.add(
+      TransactionType.income,
+      300000,
+      w.salary,
+      w.bank,
+      DateTime(2026, 9, 1),
+      tax: 30000,
+    );
+    await w.add(
+      TransactionType.expense,
+      5000,
+      w.groceries,
+      w.cash,
+      DateTime(2026, 9, 10),
+    );
+    await w.add(
+      TransactionType.expense,
+      7000,
+      w.food,
+      w.cash,
+      DateTime(2026, 11, 2),
+      tax: 1000,
+    );
+    await w.add(
+      TransactionType.expense,
+      9999,
+      w.food,
+      w.cash,
+      DateTime(2026, 12, 1),
+    );
+    await w.services.transfers.create(
+      AccountTransfer(
+        fromAccountId: w.bank.id!,
+        toAccountId: w.cash.id!,
+        amountMinor: 20000,
+        occurredAt: DateTime(2026, 10, 15),
+      ),
+    );
+    await w.services.taxes.create(
+      TaxPayment(
+        amountMinor: 2000,
+        paidAt: DateTime(2026, 10, 20),
+        accountId: w.cash.id!,
+      ),
+    );
+
+    final report = await w.services.reports.build(
+      DateTime(2026, 9),
+      DateTime(2026, 12),
+    );
+    expect(report.incomeMinor, 300000);
+    expect(report.expenseMinor, 12000);
+    expect(report.taxMinor, 33000);
+    expect(report.netMinor, 300000 - 12000 - 33000);
+    expect(report.entryCount, 4); // 3 transactions + 1 standalone tax
+    expect(report.months.map((m) => m.month.month), [9, 10, 11]);
+    expect(report.months.first.taxMinor, 30000);
+    expect(report.months[1].expenseMinor, 0);
+
+    final cash = report.accounts.firstWhere((a) => a.account.id == w.cash.id);
+    final bank = report.accounts.firstWhere((a) => a.account.id == w.bank.id);
+    expect(cash.inMinor, 20000);
+    expect(cash.outMinor, 5000 + 7000 + 1000 + 2000);
+    expect(cash.taxMinor, 3000);
+    expect(bank.inMinor, 300000);
+    expect(bank.outMinor, 30000 + 20000);
+
+    // Subcategories roll up into their parent.
+    final reports = ReportsController(w.services, now: DateTime(2026, 11, 15));
+    addTearDown(reports.dispose);
+    await _idle(reports);
+    reports.setCustomRange(DateRange(DateTime(2026, 9), DateTime(2026, 12)));
+    await _idle(reports);
+    final food = reports.spending.single;
+    expect(food.name, 'Food');
+    expect(food.totalMinor, 12000);
+    expect(food.parts.map((p) => p.$1), ['Food', 'Groceries']);
+  });
+
+  test('report periods step and stop at the current one', () async {
+    final w = await _World.create();
+    addTearDown(w.services.close);
+    final c = ReportsController(w.services, now: DateTime(2026, 11, 15));
+    addTearDown(c.dispose);
+    await _idle(c);
+    expect(c.range.label, 'November 2026');
+    expect(c.canGoNext, isFalse);
+    c.previous();
+    expect(c.range.label, 'October 2026');
+    expect(c.canGoNext, isTrue);
+
+    c.setPeriod(ReportPeriod.sixMonths);
+    expect(c.range.label, 'Jun – Nov 2026');
+    c.previous();
+    expect(c.range.label, 'Dec 2025 – May 2026');
+
+    c.setPeriod(ReportPeriod.year);
+    expect(c.range.label, '2026');
+    expect(c.canGoNext, isFalse);
+
+    c.setCustomRange(
+      DateRange.days(DateTime(2026, 3, 3), DateTime(2026, 3, 15)),
+    );
+    expect(c.period, ReportPeriod.custom);
+    expect(c.canStep, isFalse);
+    expect(c.range.label, '3 – 15 Mar 2026');
+    await _idle(c);
+  });
+
+  test(
+    'history filters by account, category tree, dates, type and amount',
+    () async {
+      final w = await _World.create();
+      addTearDown(w.services.close);
+      await w.add(
+        TransactionType.expense,
+        125050,
+        w.groceries,
+        w.cash,
+        DateTime(2026, 11, 3),
+        note: 'Weekly shop',
+      );
+      await w.add(
+        TransactionType.expense,
+        4000,
+        w.food,
+        w.bank,
+        DateTime(2026, 10, 8),
+        tax: 600,
+      );
+      await w.add(
+        TransactionType.income,
+        900000,
+        w.salary,
+        w.bank,
+        DateTime(2026, 11, 1),
+      );
+      await w.services.transfers.create(
+        AccountTransfer(
+          fromAccountId: w.bank.id!,
+          toAccountId: w.cash.id!,
+          amountMinor: 50000,
+          occurredAt: DateTime(2026, 11, 2),
+        ),
+      );
+
+      final h = HistoryController(w.services);
+      addTearDown(h.dispose);
+      await _idle(h);
+      expect(h.visibleItems, hasLength(4));
+
+      h.setAccount(w.cash.id);
+      expect(
+        h.visibleItems.map((i) => i.title),
+        containsAll(['Groceries', 'Transfer']),
+      );
+      expect(h.visibleItems, hasLength(2));
+      // Transfer in (+50,000) and the groceries (−125,050) from Cash's view.
+      expect(h.totalsOf(h.visibleItems), (50000, 125050));
+      h.setAccount(null);
+
+      h.setCategory(w.food.id); // includes Groceries
+      expect(h.visibleItems, hasLength(2));
+      h.setCategory(w.groceries.id);
+      expect(h.visibleItems.single.title, 'Groceries');
+      h.clearFilters();
+
+      h.setPreset(DatePreset.lastMonth, now: DateTime(2026, 11, 15));
+      expect(h.visibleItems.single.title, 'Food');
+      expect(h.activeFilterCount, 1);
+      h.setRange(null);
+
+      h.setFilter(ActivityFilter.tax); // linked tax counts
+      expect(h.visibleItems.single.title, 'Food');
+      h.setFilter(ActivityFilter.all);
+
+      for (final q in ['1250', '1,250.5', 'Rs 1250', 'weekly']) {
+        h.setQuery(q);
+        expect(h.visibleItems.single.title, 'Groceries', reason: q);
+      }
+      h.setQuery('Cash → Bank');
+      expect(h.visibleItems, isEmpty);
+      h.setQuery('bank → cash');
+      expect(h.visibleItems.single.title, 'Transfer');
+    },
+  );
+
+  test('date range labels', () {
+    expect(DateRange.month(DateTime(2026, 2, 10)).label, 'February 2026');
+    expect(DateRange.year(2025).label, '2025');
+    expect(DateRange.months(DateTime(2026, 2), 6).label, 'Sep 2025 – Feb 2026');
+    expect(
+      DateRange.days(DateTime(2026, 1, 30), DateTime(2026, 2, 2)).label,
+      '30 Jan – 2 Feb 2026',
+    );
+    expect(
+      DateRange.days(DateTime(2025, 12, 30), DateTime(2026, 1, 2)).label,
+      '30 Dec 2025 – 2 Jan 2026',
+    );
+    expect(
+      DateRange.days(DateTime(2026, 5, 4), DateTime(2026, 5, 4)).label,
+      '4 May 2026',
+    );
+    expect(
+      DateRange.days(
+        DateTime(2026, 5, 4),
+        DateTime(2026, 5, 4),
+      ).contains(DateTime(2026, 5, 4, 23, 59)),
+      isTrue,
+    );
+  });
+}

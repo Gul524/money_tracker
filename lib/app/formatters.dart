@@ -99,3 +99,32 @@ String relativeDay(DateTime d, {DateTime? now}) {
   }
   return formatDate(day);
 }
+
+/// `Nov`
+String shortMonth(DateTime d) => _short(monthNames[d.month - 1]);
+
+/// Label for `start <= date < end`: `November 2026`, `2026`,
+/// `Jun – Nov 2026`, `3 – 15 Nov 2026`, `28 Dec 2025 – 4 Jan 2026`.
+String formatRange(DateTime start, DateTime end) {
+  final last = DateTime(end.year, end.month, end.day - 1);
+  final wholeMonths = start.day == 1 && end.day == 1;
+  if (wholeMonths) {
+    if (start.month == 1 && end.month == 1 && end.year == start.year + 1) {
+      return '${start.year}';
+    }
+    if (start.year == last.year && start.month == last.month) {
+      return formatMonthYear(start);
+    }
+    return start.year == last.year
+        ? '${shortMonth(start)} – ${shortMonth(last)} ${last.year}'
+        : '${shortMonth(start)} ${start.year} – ${shortMonth(last)} ${last.year}';
+  }
+  if (dateOnly(start) == dateOnly(last)) return formatDate(start);
+  if (start.year != last.year) {
+    return '${formatDate(start)} – ${formatDate(last)}';
+  }
+  if (start.month != last.month) {
+    return '${start.day} ${shortMonth(start)} – ${formatDate(last)}';
+  }
+  return '${start.day} – ${formatDate(last)}';
+}
