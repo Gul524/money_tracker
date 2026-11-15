@@ -1,5 +1,6 @@
 import '../../data/models/account.dart';
 import '../../data/models/account_transfer.dart';
+import '../../data/services/defaults_service.dart';
 import '../formatters.dart';
 import 'base_controller.dart';
 import 'money_amount.dart';
@@ -17,6 +18,7 @@ class TransferController extends BaseController {
     refresh();
   }
   final AccountTransfer? editing;
+  bool _defaultsApplied = false;
   List<Account> accounts = [];
   Map<int, int> balances = {};
   int? fromAccountId;
@@ -35,6 +37,18 @@ class TransferController extends BaseController {
                 !a.isArchived || a.id == fromAccountId || a.id == toAccountId,
           )
           .toList();
+      if (editing == null && !_defaultsApplied) {
+        _defaultsApplied = true;
+        final defaults = (await services.defaults.load()).accountByKind;
+        bool usable(int? id) =>
+            id != null && accounts.any((a) => a.id == id && !a.isArchived);
+        final from = defaults[DefaultKind.transferFrom];
+        final to = defaults[DefaultKind.transferTo];
+        if (fromAccountId == null && usable(from)) fromAccountId = from;
+        if (toAccountId == null && usable(to) && to != fromAccountId) {
+          toAccountId = to;
+        }
+      }
       balances = {
         for (final a in accounts)
           a.id!: await services.accounts.balanceMinor(a.id!),

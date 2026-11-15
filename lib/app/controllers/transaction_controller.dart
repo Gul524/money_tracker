@@ -3,6 +3,7 @@ import '../../data/models/category.dart';
 import '../../data/models/model_types.dart';
 import '../../data/models/money_transaction.dart';
 import '../../data/models/tax_payment.dart';
+import '../../data/services/defaults_service.dart';
 import 'base_controller.dart';
 import '../formatters.dart';
 import 'category_path.dart';
@@ -50,6 +51,13 @@ class TransactionController extends BaseController {
 
   /// Becomes true once an edited transaction's linked tax has been loaded.
   bool taxLoaded = false;
+
+  /// Defaults from Settings › Defaults, applied to new entries only.
+  EntryDefaults defaults = const EntryDefaults();
+  bool _defaultsApplied = false;
+
+  /// Set once the user picks an account, so defaults never overwrite it.
+  bool _accountChosen = false;
   List<Account> accounts = [];
   List<Category> categories = [];
   Map<int, int> balances = {};
@@ -108,6 +116,12 @@ class TransactionController extends BaseController {
         if (tax != null) taxText = amountInputText(tax.amountMinor);
       }
       taxLoaded = true;
+      defaults = await services.defaults.load();
+      if (!isEditing && !_defaultsApplied) {
+        _defaultsApplied = true;
+        _applyCategoryDefault();
+        _applyAccountDefault();
+      }
       balances = {
         for (final a in accounts)
           a.id!: await services.accounts.balanceMinor(a.id!),
@@ -123,7 +137,33 @@ class TransactionController extends BaseController {
     kind = value;
     if (!availableCategories.any((c) => c.id == categoryId)) categoryId = null;
     if (!isOwe) dueAt = null;
+    if (!isEditing) {
+      _applyCategoryDefault();
+      _applyAccountDefault();
+    }
     changed();
+  }
+
+  /// Picks the entry type's default category when none is chosen.
+  void _applyCategoryDefault() {
+    if (isTax || categoryId != null) return;
+    final id = defaults.categoryByKind[kind.name];
+    if (availableCategories.any((c) => c.id == id)) categoryId = id;
+  }
+
+  /// Picks the category's default wallet, else the entry type's, unless the
+  /// user already chose one.
+  void _applyAccountDefault() {
+    if (_accountChosen) return;
+    final byCategory = isTax || categoryId == null
+        ? null
+        : defaults.accountByCategory[categoryId];
+    for (final id in [byCategory, defaults.accountByKind[kind.name]]) {
+      if (id != null && accounts.any((a) => a.id == id && !a.isArchived)) {
+        accountId = id;
+        return;
+      }
+    }
   }
 
   void setAmount(String value) {
@@ -133,11 +173,13 @@ class TransactionController extends BaseController {
 
   void setCategory(int? value) {
     categoryId = value;
+    if (!isEditing) _applyAccountDefault();
     changed();
   }
 
   void setAccount(int? value) {
     accountId = value;
+    _accountChosen = true;
     changed();
   }
 

@@ -8,6 +8,7 @@ import '../data/repo/tax_repository.dart';
 import '../data/repo/transaction_repository.dart';
 import '../data/repo/transfer_repository.dart';
 import '../data/services/dashboard_service.dart';
+import '../data/services/defaults_service.dart';
 import '../data/services/activity_service.dart';
 import '../data/services/local_database.dart';
 import '../data/services/report_service.dart';
@@ -24,7 +25,8 @@ class AppServices extends ChangeNotifier {
       dashboard = DashboardService(database),
       activity = ActivityService(database),
       reports = ReportService(database),
-      settings = SettingsService(database);
+      settings = SettingsService(database),
+      defaults = DefaultsService(database);
 
   factory AppServices.create() => AppServices._(LocalDatabase());
   factory AppServices.withDatabase(LocalDatabase database) =>
@@ -41,6 +43,7 @@ class AppServices extends ChangeNotifier {
   final ActivityService activity;
   final ReportService reports;
   final SettingsService settings;
+  final DefaultsService defaults;
   String currencyCode = 'PKR';
   ThemeMode themeMode = ThemeMode.system;
 

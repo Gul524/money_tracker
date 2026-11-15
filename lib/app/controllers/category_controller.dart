@@ -45,6 +45,7 @@ class CategoryController extends BaseController {
   Future<bool> remove(int id) async =>
       await run(() async {
         await services.categories.delete(id);
+        await services.defaults.forgetCategory(id);
         services.changed();
         return true;
       }) ==

@@ -7,6 +7,7 @@ import '../widgets/app_widgets.dart';
 import 'account_screen.dart';
 import 'asset_screen.dart';
 import 'category_screen.dart';
+import 'defaults_screen.dart';
 import 'owe_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -93,6 +94,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                         ),
                         onTap: _pickCurrency,
+                      ),
+                      AppTile(
+                        leading: const IconBadge(Icons.tune_rounded),
+                        title: 'Defaults for new entries',
+                        subtitle: 'Category and wallet picked for you',
+                        onTap: () => _open(DefaultsScreen(services: services)),
                       ),
                       Padding(
                         padding: const EdgeInsets.all(SpaceSize.large),

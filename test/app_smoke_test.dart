@@ -6,6 +6,7 @@ import 'package:money_tracker/app/screens/app_shell.dart';
 import 'package:money_tracker/app/screens/reports_screen.dart';
 import 'package:money_tracker/app/screens/settings_screen.dart';
 import 'package:money_tracker/app/screens/account_detail_screen.dart';
+import 'package:money_tracker/app/screens/defaults_screen.dart';
 import 'package:money_tracker/data/models/account.dart';
 import 'package:money_tracker/data/models/account_transfer.dart';
 import 'package:money_tracker/data/models/model_types.dart';
@@ -265,5 +266,43 @@ void main() {
     expect(find.byType(AccountDetailScreen), findsOneWidget);
     expect(find.text('Bank account balance'), findsOneWidget);
     expect(find.text('+Rs 500.00'), findsWidgets);
+  });
+
+  testWidgets('settings defaults are chosen and prefill a new expense', (
+    tester,
+  ) async {
+    _phoneSize(tester);
+    final services = _services();
+    addTearDown(services.close);
+    await tester.runAsync(services.initialize);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: AppShell(services: services),
+      ),
+    );
+    await _settle(tester);
+
+    await tester.tap(_nav('Settings'));
+    await _settle(tester);
+    await tester.tap(find.text('Defaults for new entries'));
+    await _settle(tester);
+    expect(find.byType(DefaultsScreen), findsOneWidget);
+    await tester.tap(find.text('Category').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Shopping'));
+    await _settle(tester);
+    expect(find.text('Shopping'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    await tester.tap(_nav('Home'));
+    await _settle(tester);
+    await tester.tap(find.byTooltip('Add'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Expense'));
+    await _settle(tester);
+    expect(find.text('Shopping'), findsOneWidget);
+    expect(find.text('Cash'), findsOneWidget);
   });
 }

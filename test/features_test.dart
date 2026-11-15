@@ -5,6 +5,10 @@ import 'package:money_tracker/app/app_services.dart';
 import 'package:money_tracker/app/controllers/base_controller.dart';
 import 'package:money_tracker/app/controllers/history_controller.dart';
 import 'package:money_tracker/app/controllers/reports_controller.dart';
+import 'package:money_tracker/app/controllers/category_controller.dart';
+import 'package:money_tracker/app/controllers/transaction_controller.dart';
+import 'package:money_tracker/app/controllers/transfer_controller.dart';
+import 'package:money_tracker/data/services/defaults_service.dart';
 import 'package:money_tracker/app/date_range.dart';
 import 'package:money_tracker/data/models/account.dart';
 import 'package:money_tracker/data/models/account_transfer.dart';
@@ -417,5 +421,89 @@ void main() {
       ).contains(DateTime(2026, 5, 4, 23, 59)),
       isTrue,
     );
+  });
+
+  test('defaults prefill new entries without overriding choices', () async {
+    final w = await _World.create();
+    addTearDown(w.services.close);
+    final d = w.services.defaults;
+    final wallet = await w.services.accounts.create(
+      const Account(name: 'Wallet', type: AccountType.cash),
+    );
+    await d.setCategoryForKind(DefaultKind.expense, w.groceries.id);
+    await d.setAccountForKind(DefaultKind.expense, wallet.id);
+    await d.setCategoryForKind(DefaultKind.income, w.salary.id);
+    await d.setAccountForCategory(w.salary.id!, w.bank.id);
+    await d.setAccountForKind(DefaultKind.tax, w.bank.id);
+    await d.setAccountForKind(DefaultKind.transferFrom, w.bank.id);
+    await d.setAccountForKind(DefaultKind.transferTo, w.cash.id);
+
+    final loaded = await d.load();
+    expect(loaded.categoryByKind, {
+      'expense': w.groceries.id,
+      'income': w.salary.id,
+    });
+    expect(loaded.accountByCategory, {w.salary.id: w.bank.id});
+
+    final t = TransactionController(w.services);
+    addTearDown(t.dispose);
+    await _idle(t);
+    expect(t.categoryId, w.groceries.id);
+    expect(t.accountId, wallet.id);
+
+    // Switching type applies that type's category and its category wallet.
+    t.setKind(EntryKind.income);
+    expect(t.categoryId, w.salary.id);
+    expect(t.accountId, w.bank.id);
+
+    // A wallet picked by hand is kept when the category changes.
+    t.setAccount(w.cash.id);
+    t.setCategory(w.salary.id);
+    expect(t.accountId, w.cash.id);
+
+    t.setKind(EntryKind.tax);
+    expect(t.accountId, w.cash.id);
+    final tax = TransactionController(w.services, initialKind: EntryKind.tax);
+    addTearDown(tax.dispose);
+    await _idle(tax);
+    expect(tax.accountId, w.bank.id);
+
+    // Editing never applies defaults.
+    final saved = await w.add(
+      TransactionType.expense,
+      100,
+      w.food,
+      w.cash,
+      DateTime(2026, 11, 1),
+    );
+    final edit = TransactionController(w.services, existing: saved);
+    addTearDown(edit.dispose);
+    await _idle(edit);
+    expect((edit.categoryId, edit.accountId), (w.food.id, w.cash.id));
+
+    final transfer = TransferController(w.services);
+    addTearDown(transfer.dispose);
+    await _idle(transfer);
+    expect(
+      (transfer.fromAccountId, transfer.toAccountId),
+      (w.bank.id, w.cash.id),
+    );
+
+    // Archived wallets are skipped; deleted ones are forgotten.
+    await w.services.accounts.update(wallet.copyWith(isArchived: true));
+    final t2 = TransactionController(w.services);
+    addTearDown(t2.dispose);
+    await _idle(t2);
+    expect(t2.accountId, isNot(wallet.id));
+    final categories = CategoryController(w.services);
+    addTearDown(categories.dispose);
+    await _idle(categories);
+    expect(await categories.remove(w.groceries.id!), isTrue);
+    await w.services.accounts.delete(wallet.id!);
+    await d.forgetAccount(wallet.id!);
+    final after = await d.load();
+    expect(after.categoryByKind.containsKey('expense'), isFalse);
+    expect(after.accountByKind.containsKey('expense'), isFalse);
+    expect(after.accountByKind[DefaultKind.tax], w.bank.id);
   });
 }

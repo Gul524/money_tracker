@@ -55,6 +55,7 @@ class AccountController extends BaseController {
   Future<bool> remove(int id) async =>
       await run(() async {
         await services.accounts.delete(id);
+        await services.defaults.forgetAccount(id);
         services.changed();
         return true;
       }) ==

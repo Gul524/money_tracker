@@ -16,7 +16,7 @@ Local-first, offline personal finance tracker (Flutter, Material 3, SQLite via `
 - **Accounts** (cash / bank) with computed balances
 - **Assets** (things owned; purchase cost + current value; don't affect balances)
 - **Categories** (hierarchical, typed income/expense/both)
-- **Settings**: display currency (label only, no conversion) and theme mode
+- **Settings**: display currency (label only, no conversion), theme mode, and **defaults for new entries** (category + wallet per entry type, wallet per category, transfer From/To)
 
 Package name `money_tracker`, version `0.1.0+1`, Dart SDK `^3.13.3`. Android applicationId `com.example.money_tracker`. Platforms folders: `android/`, `linux/` (desktop sqflite not configured — tests use `sqflite_common_ffi`).
 
@@ -97,6 +97,7 @@ lib/
       category_controller.dart      Category CRUD
       owe_controller.dart           Pending owes (split owedToMe/iOwe + totals) + complete
       settings_controller.dart      Currency + theme
+      defaults_controller.dart      Settings › Defaults state (active wallets, categories, EntryDefaults)
     screens/
       splash_screen.dart            Brand mark, init, retry; fades to AppShell
       app_shell.dart                NavigationBar (4 tabs, IndexedStack) + "Add" FAB on Home/History
@@ -106,7 +107,8 @@ lib/
       activity_list.dart            ActivityDayGroups (day headers + tiles) and openActivity() (routes any row to its editor)
       account_detail_screen.dart    One account: balance, this month in/out, its activity, edit/delete
       reports_screen.dart           Period segments, range bar, summary, month-by-month chart, categories, tax, accounts, position
-      settings_screen.dart          Preferences + Manage hub + About
+      settings_screen.dart          Preferences (incl. Defaults tile) + Manage hub + About
+      defaults_screen.dart          Settings › Defaults: per entry type, transfer, and per-category wallet pickers
       transaction_screen.dart       Transaction/tax form (big amount, form rows, pinned Save)
       transfer_screen.dart          Transfer form (From/To + swap); edit/delete when `existing`
       account_screen.dart           Accounts (active/archived) → AccountDetailScreen; showAccountEditor() sheet
@@ -130,6 +132,7 @@ lib/
       report_service.dart           PeriodReport for any date range (totals, tax, owes settled, categories, AccountFlow, MonthBucket)
       activity_service.dart         Merged activity feed (transactions + tax + transfers)
       settings_service.dart         app_settings key/value
+      defaults_service.dart         EntryDefaults (category/wallet per entry type, wallet per category) stored in app_settings
 test/
   data_layer_test.dart              Repo/service tests (in-memory FFI DB)
   app_smoke_test.dart               Widget tests (shell/add menu/tabs, end-to-end expense, theme switching)
@@ -178,7 +181,7 @@ All immutable, `const` constructors, `id` is `int?` (null = not yet saved), `cop
 | `assets` | id, name (non-empty), acquired_on, purchase_amount_minor ≥0, current_value_minor ≥0, purchase_transaction_id UNIQUE → transactions, notes |
 | `tax_payments` | id, amount_minor > 0, paid_at, account_id NOT NULL → accounts, note, transaction_id → transactions **ON DELETE CASCADE** (added v4). Index on paid_at; partial UNIQUE index `tax_payments_transaction_idx` (one tax per transaction). |
 | `transfers` (added v2) | id, from_account_id, to_account_id (→ accounts, NOT NULL), amount_minor > 0, occurred_at, note, CHECK from ≠ to. Index on occurred_at. |
-| `app_settings` (added v2) | key TEXT PK, value TEXT. Seeded `currency=PKR`. `theme_mode` row inserted on first set. |
+| `app_settings` (added v2) | key TEXT PK, value TEXT. Seeded `currency=PKR`. `theme_mode` row inserted on first set. Defaults rows: `default_category:<kind>`, `default_account:<kind>` (kind = income/expense/oweIn/oweOut/tax/transferFrom/transferTo), `default_account_for_category:<categoryId>`; value = id as text. |
 
 **Migrations (`_upgradeSchema`):** `<2` → create transfers + app_settings; `<3` → `_seedDefaults`; `<4` → `ALTER TABLE tax_payments ADD COLUMN transaction_id` + unique index (skipped if the table is missing or already has the column).
 **Seeding (`_seedDefaults`, on create and v3 upgrade), idempotent via `INSERT … WHERE NOT EXISTS` (case-insensitive name, root level):**
@@ -224,6 +227,7 @@ Note: repos and services each construct their own repository instances over the 
   - Tax: title "Tax payment", subtitle note or "Paid tax", amount negative, `tax` set.
   - Transfer: title "Transfer", subtitle & accountName "FromName → ToName", amount positive (shown neutral), `transfer` set.
 - **`ReportService.build(start, end)` → `PeriodReport`** (`start <= date < end`): `incomeMinor`, `expenseMinor`, `taxMinor` (all tax_payments incl. linked), `oweReceivedMinor`/`oweRepaidMinor` (completed owes by `completed_at`), `entryCount` (income/expense + standalone tax), `categories: List<CategoryTotal>` (with `parentId`), `accounts: List<AccountFlow{account, inMinor, outMinor, taxMinor, balanceMinor(today)}>` (in = income, received owes, transfers in; out = expense, repaid owes, tax, transfers out; archived accounts only if active in period; sorted by name), `months: List<MonthBucket{month, income, expense, tax}>` (every calendar month in range, grouped by `substr(date,1,7)`); getters `netMinor` (income − expense − tax), `outflowMinor`.
+- **`DefaultsService`** (`services.defaults`): `load()` → `EntryDefaults{categoryByKind, accountByKind, accountByCategory}`; `setCategoryForKind(kind, id?)`, `setAccountForKind(kind, id?)`, `setAccountForCategory(categoryId, accountId?)` (null deletes the row); `forgetCategory(id)` / `forgetAccount(id)` (called by Category/AccountController.remove). `DefaultKind` string constants. No FKs: readers ignore ids that are missing/archived/type-incompatible.
 - **`SettingsService`**: `currency()` (default PKR), `setCurrency(code)` allowed `PKR, USD, EUR, GBP` (uses UPDATE on seeded row), `themeMode()` returns `light|dark|system` (default `system`), `setThemeMode(mode)` (INSERT OR REPLACE).
 
 ---
@@ -275,11 +279,12 @@ All (except Splash) extend `BaseController` and call `refresh()` in constructor.
 | `AssetController` | items | `save({...})`, `remove(id)` |
 | `CategoryController` | items | `save({id,name,type,parentId})`, `remove(id)`, `pathFor()` |
 | `OweController` | items (pending owes), accounts | `complete(id, accountId)`; getters `owedToMe`, `iOwe`, `owedToMeMinor`, `iOweMinor` |
+| `DefaultsController` | `defaults`, `accounts` (active), `categories` | `categoriesFor(kind)`, `sortedCategories`, `categoryFor(kind)`, `accountFor(kind)`, `accountForCategory(id)`, `setCategory`, `setAccount`, `setCategoryAccount` (each saves then reloads) |
 | `SettingsController` | currency, themeMode | `setCurrency(v)` (also sets `services.currencyCode` + `changed()`), `setThemeMode(v)` |
 
 **`EntryKind { income, expense, oweIn, oweOut, tax }`** (in transaction_controller.dart). `tax` is UI-only and saves to `TaxRepository`.
 
-**`TransactionController.save()`:** parse amount (>0) → tax kind: require account → `taxes.create`/`update` (`existingTax`) | else require category, account unless owe → build `MoneyTransaction(type: byName(kind.name))`; owe keeps `editing?.oweStatus ?? pending` + `completedAt`, sets dueAt/party → `transactions.saveWithTax(tx, taxMinor)` (tax only for income/expense; empty = 0) → `services.changed()`. On edit, `refresh()` loads the linked tax once into `taxText` and sets `taxLoaded` (the screen keys the tax row on it). Getters `canHaveTax`, `amountMinor`, `taxMinor`, `isEditing`. Pickers include an archived account only if the entry already uses it (same in TransferController). `setKind` clears incompatible category and dueAt if not owe. When editing, kind can't change (chips hidden).
+**`TransactionController.save()`:** parse amount (>0) → tax kind: require account → `taxes.create`/`update` (`existingTax`) | else require category, account unless owe → build `MoneyTransaction(type: byName(kind.name))`; owe keeps `editing?.oweStatus ?? pending` + `completedAt`, sets dueAt/party → `transactions.saveWithTax(tx, taxMinor)` (tax only for income/expense; empty = 0) → `services.changed()`. On edit, `refresh()` loads the linked tax once into `taxText` and sets `taxLoaded` (the screen keys the tax row on it). Getters `canHaveTax`, `amountMinor`, `taxMinor`, `isEditing`. **Defaults (new entries only):** first `refresh()` loads `EntryDefaults` and applies the kind's category (if none chosen and type-compatible) then the wallet: category's wallet → kind's wallet (active accounts only); falls back to the only account. `setKind` re-applies; `setCategory` re-applies the wallet; `setAccount` marks `_accountChosen` so defaults never overwrite a manual pick. `TransferController` applies `transferFrom`/`transferTo` once for new transfers. Pickers include an archived account only if the entry already uses it (same in TransferController). `setKind` clears incompatible category and dueAt if not owe. When editing, kind can't change (chips hidden).
 
 **`MoneyAmount.parse(input, {allowZero, allowNegative})`**: regex `^-?\d+(\.\d{1,2})?$` → minor int. Accounts allow zero/negative opening; assets allow zero. `AmountField` input formatter only allows `^\d*\.?\d{0,2}`.
 
@@ -308,9 +313,10 @@ Flow: `main` → `SplashScreen` (brand mark, spinner; friendly error + "Try agai
 | `HistoryScreen({services, title='History', accountId, categoryId, range, initialFilter})` | Tab 1; pushed pre-filtered from Reports (category / tax) and Account detail ("Search") | `SliverAppBar.medium(title)`, search ("Search name, note or amount"), chip row: `Filters` ActionChip (Badge = active count) + type ChoiceChips; active filters as InputChips (tap → sheet, × → clear); `_ResultSummary` card (N entries · In · Out) when filtering; `ActivityDayGroups(accountId:)`. `_FilterSheet` (SheetScaffold "Filter activity"): Account picker (All/-1 sentinel), Category picker (tree indent), Date chips (Any time / This month / Last month / Last 3 months / This year / Custom dates… → `showDateRangePicker`), primary "Show N results", secondary "Clear filters". No-match state offers "Clear filters". Every row tappable via `openActivity`. |
 | `AccountDetailScreen({services, accountId})` | Account list, Home accounts card, Reports accounts | AppBar(name, edit ✎ → `showAccountEditor`; pops if deleted). Balance card (Cash/Bank balance, Archived pill, starting balance), "This month · Month Year" Money in / Money out stat cards (per-account `effectOn`), "Activity" + Search (→ HistoryScreen(accountId)), `ActivityDayGroups(accountId)` (transfers shown ± for this account, account name omitted). Uses `AccountController` + `HistoryController(accountId)`. |
 | `ReportsScreen` | Tab 2 | `ReportsController`. `SegmentedButton` Month / 6 months / Year / Custom (Custom → `showDateRangePicker`), `_RangeBar` (‹ label › with next disabled at current; custom: "Change" row), `_Summary` (Net for this period, income/expense/tax bar, rows, "N entries"), "Month by month" `_TrendChart` (only when >1 month; income vs spending incl. tax bars, Semantics label), "Spending by category" / "Income by category" `_Breakdown` (rolled-up groups with subcategory lines; tap → HistoryScreen(category, range, type)), "Tax paid" `_TaxSection` (total, % of income, per account; "See entries" → History tax filter), "Accounts" `_AccountFlows` (In · Out, signed net; tap → AccountDetailScreen), "Money owed settled" (if any), "Where you stand today" `_Position` (net worth). |
-| `SettingsScreen({services})` | Tab 3 | `SliverAppBar.medium('Settings')`: Preferences (Currency tile → picker of `currencyNames`; Appearance `SegmentedButton<ThemeMode>` System/Light/Dark), InfoNote about no conversion, Manage (Accounts, Categories, Money owed, Assets → push), About (privacy, Version 0.1.0). |
+| `SettingsScreen({services})` | Tab 3 | `SliverAppBar.medium('Settings')`: Preferences (Currency tile → picker of `currencyNames`; "Defaults for new entries" → `DefaultsScreen`; Appearance `SegmentedButton<ThemeMode>` System/Light/Dark), InfoNote about no conversion, Manage (Accounts, Categories, Money owed, Assets → push), About (privacy, Version 0.1.0). |
 | `TransactionScreen({services, existing, existingTax, initialKind})` | Add menu, `openActivity` (transactions & standalone tax), Owe "Edit details" | AppBar title by kind ("Add expense", "Someone owes me", "Edit tax payment"…), delete icon when editing (confirm mentions linked tax). Body: kind `ChoiceChip`s (new only), `AmountField` (income green, else neutral), GroupedCard[Category (picker w/ icons + "Manage categories" footer → CategoryScreen), Account (picker w/ balances; optional+clearable for owes), Date, Due date (owes, clearable)], **income/expense only:** GroupedCard[`FormTextRow(amount, prefix symbol, suffix "tax paid", hint "Tax paid (optional)")`], GroupedCard[Person (owes), Note], InfoNote tax summary ("Rs 1,170.00 leaves Cash: Rs 1,000.00 plus Rs 170.00 tax." / "Bank receives … minus … tax."), InfoNote for owes/tax, ErrorBanner. `bottomNavigationBar: BottomActionBar(Save)`. |
 | `TransferScreen({services, existing})` | Add menu, `openActivity` | Title "Transfer money"/"Edit transfer" (+ delete icon), `AmountField` (blue), GroupedCard[From, To] with centered `IconButton.filledTonal` swap, GroupedCard[Date, Note], InfoNote, pinned "Transfer"/"Save". |
+| `DefaultsScreen` | Settings › Defaults for new entries | AppBar 'Defaults', InfoNote (category wallet beats type wallet), sections Expense / Income / Someone owes me / I owe someone (Category + Wallet FormRows, clearable, placeholder "None"), Tax payment (Wallet), Transfer (From/To), then "Wallet for expense/income/shared categories" tiles (indented tree, trailing wallet or "None"). Pickers include "No default" (-1 sentinel). |
 | `AccountScreen` | Settings › Accounts, Home | AppBar + FAB "Add account". Total-in-active card, "Active" and "Archived" groups. Tap row → `AccountDetailScreen`. `showAccountEditor(context, {services, controller, existing}) → Future<bool deleted>` (top-level, reused by detail) opens `SheetScaffold`: Account name, Cash/Bank `SegmentedButton`, Starting balance (symbol prefix, helper), Archive switch (edit), Save, "Delete account" (confirm). |
 | `AssetScreen` | Settings › Assets, Home | AppBar + FAB "Add asset". Total value card, list with paid/date subtitle and gain/loss. Sheet: Name, Price paid / Worth today (row), Bought on, Notes, InfoNote, Save, Delete. Blank "worth today" = price paid. |
 | `CategoryScreen` | Settings › Categories, category picker footer | AppBar + FAB "Add category". Sections Expenses / Income / Used for both; tree order by path, indented 24dp per depth. Sheet: Name, Used for segmented, "Inside" FormRow → picker (Top level = -1 sentinel), Save, Delete. |
@@ -342,8 +348,8 @@ Use `sqfliteFfiInit()` + `LocalDatabase(factory: databaseFactoryFfi[NoIsolate], 
 - `data_layer_test.dart`: seeded defaults; v2 upgrade; balances/owing/tax/dashboard; activity merge; **category totals by month** (excludes owes and other months).
 - `app_smoke_test.dart`: shell (Overview, Total balance, welcome card, nav, Add menu → Add expense / Transfer money, Reports, Settings); **end-to-end expense** (Add → Expense → amount 1250.5 → Category Food → Cash preselected → Save → "Saved", balance −125050); appearance segmented System/Light/Dark persisted.
 - `formatters_test.dart`: money grouping/symbols/signs, amountInputText, relative/long dates.
-- `features_test.dart` (plain `test`, `AppServices.withDatabase` + `_World` seed: Cash 10,000 + Bank, Food › Groceries; `_idle(controller)` polls `busy`): linked tax balances/move/clear/cascade + owes reject tax; v3→v4 column added; `ReportService.build` totals/accounts/months + category roll-up; report period stepping & labels; History filters (account totals, category tree, preset, tax, amount/text search); `DateRange` labels.
-- `app_smoke_test.dart` also: expense **with tax 100** (summary note, balance −135050, `taxMinor`), and History Filters sheet → This month → "Show 1 results" → tap transfer → "Edit transfer"; Reports Year; Home account → AccountDetailScreen.
+- `features_test.dart` (plain `test`, `AppServices.withDatabase` + `_World` seed: Cash 10,000 + Bank, Food › Groceries; `_idle(controller)` polls `busy`): linked tax balances/move/clear/cascade + owes reject tax; v3→v4 column added; `ReportService.build` totals/accounts/months + category roll-up; report period stepping & labels; History filters (account totals, category tree, preset, tax, amount/text search); `DateRange` labels; **defaults** (storage, type/category/manual priority, tax & transfer, edit ignores, archived skipped, forget on delete).
+- `app_smoke_test.dart` also: expense **with tax 100** (summary note, balance −135050, `taxMinor`), and History Filters sheet → This month → "Show 1 results" → tap transfer → "Edit transfer"; Reports Year; Home account → AccountDetailScreen; Settings › Defaults pick Expense category Shopping → new expense prefilled Shopping + Cash.
 - The test font renders wide glyphs, so it catches text overflow (a real one in the balance card was fixed this way). For visual review, a temporary test can load Roboto from `<flutter>/bin/cache/artifacts/material_fonts` and `RenderRepaintBoundary.toImage()` screens to PNG.
 
 ---
@@ -373,6 +379,7 @@ Use `sqfliteFfiInit()` + `LocalDatabase(factory: databaseFactoryFfi[NoIsolate], 
 ## 10. How to add things (checklists)
 - **New screen/UI:** compose only from `app_widgets.dart` components (SectionHeader + GroupedCard + AppTile/FormRow, SheetScaffold for editors, showPickerSheet for choices, EmptyState/ErrorBanner). Use `SpaceSize.gutter` margins, `AppColors` for money semantics, plain-language labels. Pushed pages need a Scaffold + AppBar. Reachable from Home or Settings › Manage.
 - **New entity:** model in `data/models` (+ `part`, run build_runner) → table in `_createSchema` + migration in `_upgradeSchema` (bump version) → repo extending `CrudRepository` → field on `AppServices` → controller extending `BaseController` (call `services.changed()` after writes) → screen with `AnimatedBuilder(controller)` → navigation entry → tests.
+- **New default:** add a `DefaultKind` constant, a section in `DefaultsScreen`, and apply it in the relevant controller's first `refresh()` for new entries only.
 - **New setting:** key in `app_settings` via `SettingsService` getter/setter (insert-replace) → mirror on `AppServices` if global → `SettingsController` + a tile in `SettingsScreen` Preferences (picker sheet or SegmentedButton).
 - **New money field:** store as `int` minor; parse with `MoneyAmount.parse`; display with `AmountText`/`money()`; prefill inputs with `amountInputText()`.
 - **Affects balances?** Update `AccountRepository.balanceMinor` AND `DashboardService` AND `ReportService` (totals + `_accountFlows`) AND `ActivityService` (`netEffectMinor`/`effectOn`) consistently.
