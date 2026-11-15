@@ -87,6 +87,7 @@ lib/
     controllers/
       base_controller.dart          BaseController (run/error/busy/listener plumbing, clearError)
       money_amount.dart             MoneyAmount.parse (string → minor int)
+      amount_calculator.dart        AmountCalculator: + − × ÷ expression builder, exact (BigInt fraction) evaluation → minor units
       category_path.dart            categoryPath(): "Parent / Child / Leaf"
       splash_controller.dart        App init state
       home_controller.dart          Dashboard summary + 5 recent activity
@@ -122,6 +123,7 @@ lib/
     widgets/
       app_widgets.dart              Design-system components (exports formatters.dart + category_icons.dart)
       category_icons.dart           Icon catalog `categoryIconGroups` (key → IconData), categoryIcon(), hex helpers, categoryColor(), readableCategoryColor(), CategoryBadge
+      amount_calculator_sheet.dart  showAmountCalculator() keypad sheet (expression + live result preview, "Use Rs X")
       category_pickers.dart         showIconPickerSheet() (grouped grid) and showColorPickerSheet() (SV panel + hue slider + hex + swatches)
   data/
     models/                         Immutable entities (@JsonSerializable, copyWith) + *.g.dart (generated)
@@ -153,6 +155,7 @@ test/
   data_layer_test.dart              Repo/service tests (in-memory FFI DB)
   app_smoke_test.dart               Widget tests (shell/add menu/tabs, end-to-end expense, theme switching)
   formatters_test.dart              money/date formatter unit tests
+  amount_calculator_test.dart       Calculator arithmetic/precedence/input rules + AmountField → sheet → "Use" fills field
   features_test.dart                Linked tax, v3→v4 upgrade, period reports, report periods, history filters, range labels, defaults, category look
   import_export_test.dart           AppTransactionIoStore round trip into a fresh DB, rejected rows, ImportExportScreen with fake ExcelFiles
 README.md                           Product/UI plan + data rules (human doc)
@@ -345,7 +348,7 @@ Flow: `main` → `SplashScreen` (brand mark, spinner; friendly error + "Try agai
 ### 6.5 Shared components (`lib/app/widgets/app_widgets.dart`)
 Exports `formatters.dart` and `category_icons.dart`.
 - Layout: `SectionHeader(title, {actionLabel, onAction, padding})`, `GroupedCard({children, dividerIndent})`, `IconBadge(icon, {color, background, size})`, `AppTile({title, subtitle, leading, trailing, onTap, showChevron, subtitleColor})`.
-- Forms: `FormRow({icon, label, value, placeholder='Choose', onTap, onClear})`, `FormTextRow({icon, hint, value, onChanged, maxLines, capitalization})`, `AppTextField({label, value, onChanged, hint, helper, keyboardType, maxLines, prefixText, capitalization})`, `AmountField({controller, currency, onChanged, color, autofocus})`, `pickDate(context, initial)`.
+- Forms: `FormRow({icon, label, value, placeholder='Choose', onTap, onClear})`, `FormTextRow({icon, hint, value, onChanged, maxLines, capitalization})`, `AppTextField({label, value, onChanged, hint, helper, keyboardType, maxLines, prefixText, capitalization})`, `AmountField({controller, currency, onChanged, color, autofocus, showCalculator = true})` (a "Calculator" TextButton under the amount opens `showAmountCalculator` seeded with the field text; the result replaces the text via `amountInputText` and calls `onChanged`, so Transaction and Transfer screens both get it), `pickDate(context, initial)`.
 - Money: `AmountText(minor, {currency, tone: AmountTone{neutral,income,expense,muted}, signed, style})` (tabular figures), `ActivityTile({item, currency, onTap, showDate, accountId})` (icon/color by kind/type; owes titled by party; subtitle = type · account · "Tax Rs X" · date; transfers show route, and ± when `accountId` given; Pending `StatusPill`), `StatusPill(label, {color})`.
 - `FormTextRow` also takes `amount` (decimal keyboard, 2-dp formatter), `prefixText`, `suffixText`.
 - In `screens/activity_list.dart`: `ActivityDayGroups({items, services, accountId})`, `openActivity(context, services, item)` (transaction → TransactionScreen, tax → TransactionScreen(existingTax), transfer → TransferScreen(existing); "Saved" snackbar).
@@ -354,6 +357,7 @@ Exports `formatters.dart` and `category_icons.dart`.
 - **Periods:** `ReportPeriod {month, sixMonths, year, custom}` lives in `date_range.dart` (re-exported by reports_controller) with `DateRange.current(period, today)`, `range.step(period, ±1)`, `range.canStepForward(period, today)`; used by Reports and Import/Export.
 - **Category look** (`widgets/category_icons.dart`, exported by app_widgets): `categoryIconGroups` (9 labelled groups, ~90 icons; **keys are persisted — never rename**), `isCategoryIconKey`, `categoryIcon(name, {income, iconKey})` (chosen key, else keyword guess: food, salary, phone, rent, fuel, health…, fallback `sell_outlined`/`south_west_rounded`), `colorFromHex`/`colorToHex` (`#RRGGBB`), `categorySwatches` (12), `categoryColor(name, {hex})` (stored color or stable swatch from a name hash), `readableCategoryColor(color, brightness)` (lightens dark colors in dark mode, darkens pale ones in light mode), `CategoryBadge({name, iconKey, colorHex, income, size=40})` (tinted rounded square, alpha .14 light / .22 dark). Used by category list/pickers, transaction Category row & picker, History filter picker, Defaults, Reports breakdown (bar uses category color), and `ActivityTile` for income/expense (owes/tax/transfer keep semantic icons).
 - **Pickers** (`widgets/category_pickers.dart`): `showIconPickerSheet(context, {color, selected, automatic}) → String?` (`automaticIcon` = '' for "Automatic"; cells have Semantics labels = key with spaces), `showColorPickerSheet(context, {initial, icon}) → Color?` (SheetScaffold "Tag color": preview badge + swatch + Hex field (6 hex chars), `_SaturationValuePanel` (white→hue × transparent→black; tap/drag via separate vertical+horizontal drag recognizers so the sheet doesn't steal drags), `_HueSlider`, quick swatches, "Use this color").
+- **Calculator** (`widgets/amount_calculator_sheet.dart` + `controllers/amount_calculator.dart`): keypad C ⌫ ÷ × / 7-9 − / 4-6 + / 1-3 = (tall) / 00 0 . ; display shows the expression (`1,200 + 350 × 2`) and live `= Rs 1,900.00`; × ÷ before + −; trailing operator ignored in preview; max 2 decimals and 10 whole digits per number; `=` collapses to the result to keep going; ÷0 → "Can’t divide by 0"; result ≤ 0 can't be used. Keys have Semantics labels (Plus, Minus, Multiply, Divide, Equals, Delete, Clear, digits).
 - `PickerOption` has `leading` (overrides `icon`); `FormRow` has `leading` (overrides `icon`) and `valueLeading` (before value text).
 
 ### 6.6 Theme & sizes

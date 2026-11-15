@@ -6,6 +6,7 @@ import '../../data/services/activity_service.dart';
 import '../app_sizes.dart';
 import '../app_theme.dart';
 import '../formatters.dart';
+import 'amount_calculator_sheet.dart';
 import 'category_icons.dart';
 
 export '../formatters.dart';
@@ -430,12 +431,34 @@ class AmountField extends StatelessWidget {
     required this.onChanged,
     this.color,
     this.autofocus = false,
+    this.showCalculator = true,
   });
   final TextEditingController controller;
   final String currency;
   final ValueChanged<String> onChanged;
   final Color? color;
   final bool autofocus;
+
+  /// Shows a "Calculator" button that opens [showAmountCalculator] and puts
+  /// its result into the field.
+  final bool showCalculator;
+
+  Future<void> _openCalculator(BuildContext context) async {
+    FocusScope.of(context).unfocus();
+    final minor = await showAmountCalculator(
+      context,
+      currency: currency,
+      initialText: controller.text,
+      color: color,
+    );
+    if (minor == null) return;
+    final text = amountInputText(minor);
+    controller.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+    onChanged(text);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -487,6 +510,14 @@ class AmountField extends StatelessWidget {
             ),
           ],
         ),
+        if (showCalculator) ...[
+          const SizedBox(height: SpaceSize.small),
+          TextButton.icon(
+            onPressed: () => _openCalculator(context),
+            icon: const Icon(Icons.calculate_outlined, size: IconSize.small),
+            label: const Text('Calculator'),
+          ),
+        ],
       ],
     );
   }
