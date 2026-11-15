@@ -15,7 +15,7 @@ Local-first, offline personal finance tracker (Flutter, Material 3, SQLite via `
 - **Transfers** between accounts
 - **Accounts** (cash / bank) with computed balances
 - **Assets** (things owned; purchase cost + current value; don't affect balances)
-- **Categories** (hierarchical, typed income/expense/both)
+- **Categories** (hierarchical, typed income/expense/both) with a user-chosen **icon** and **tag color** (any color, stored as `#RRGGBB`)
 - **Settings**: display currency (label only, no conversion), theme mode, and **defaults for new entries** (category + wallet per entry type, wallet per category, transfer From/To)
 
 Package name `money_tracker`, version `0.1.0+1`, Dart SDK `^3.13.3`. Android applicationId `com.example.money_tracker`. Platforms folders: `android/`, `linux/` (desktop sqflite not configured — tests use `sqflite_common_ffi`).
@@ -50,7 +50,7 @@ Screen (StatefulWidget)  ──owns──▶  Controller (BaseController : Chang
                          ┌────────────────┼──────────────────────┐
                     Repositories (CrudRepository<T>)      Services (Dashboard, Activity, Report, Settings)
                          └────────────────┬──────────────────────┘
-                                   LocalDatabase (single sqflite connection, schema v4)
+                                   LocalDatabase (single sqflite connection, schema v5)
 ```
 
 **Refresh mechanism (important):**
@@ -117,7 +117,8 @@ lib/
       owe_screen.dart               Money owed sections + settle sheet
     widgets/
       app_widgets.dart              Design-system components (exports formatters.dart + category_icons.dart)
-      category_icons.dart           categoryIcon(name, {income}) keyword → Material icon
+      category_icons.dart           Icon catalog `categoryIconGroups` (key → IconData), categoryIcon(), hex helpers, categoryColor(), readableCategoryColor(), CategoryBadge
+      category_pickers.dart         showIconPickerSheet() (grouped grid) and showColorPickerSheet() (SV panel + hue slider + hex + swatches)
   data/
     models/                         Immutable entities (@JsonSerializable, copyWith) + *.g.dart (generated)
       model_types.dart              Enums + `omitted` sentinel
@@ -162,7 +163,7 @@ All immutable, `const` constructors, `id` is `int?` (null = not yet saved), `cop
 | Model | Fields |
 |---|---|
 | `Account` | id, name, type: AccountType, openingBalanceMinor (default 0, may be negative), isArchived (default false) |
-| `Category` | id, name, type: CategoryType, parentId? |
+| `Category` | id, name, type: CategoryType, parentId?, icon? (catalog key; null = automatic from name), color? (`#RRGGBB`; null = automatic swatch) |
 | `MoneyTransaction` | id, type: TransactionType, amountMinor, categoryId, accountId?, occurredAt, note?, party?, dueAt?, oweStatus?, completedAt? |
 | `TaxPayment` | id, amountMinor, paidAt, accountId, note?, transactionId? (set = tax paid with that income/expense) |
 | `AccountTransfer` | id, fromAccountId, toAccountId, amountMinor, occurredAt, note? |
@@ -170,12 +171,12 @@ All immutable, `const` constructors, `id` is `int?` (null = not yet saved), `cop
 
 ### 4.3 SQLite schema (`lib/data/services/local_database.dart`)
 - DB file: `<getDatabasesPath()>/money_tracker.db` (or `path` ctor arg; tests use `inMemoryDatabasePath`). `LocalDatabase({DatabaseFactory? factory, String? path})`.
-- **Version 4.** `onConfigure`: `PRAGMA foreign_keys = ON`. Connection opened lazily via `await storage.database` and cached.
+- **Version 5.** `onConfigure`: `PRAGMA foreign_keys = ON`. Connection opened lazily via `await storage.database` and cached.
 - All FKs are `ON DELETE RESTRICT` (deleting a referenced row fails → "This item is in use…").
 
 | Table | Columns / constraints |
 |---|---|
-| `categories` | id PK AI, name NOT NULL (trimmed non-empty), type CHECK income/expense/both, parent_id → categories. Index `categories_parent_idx`. |
+| `categories` | id PK AI, name NOT NULL (trimmed non-empty), type CHECK income/expense/both, parent_id → categories, icon TEXT (v5), color TEXT CHECK NULL or `#` + 6 upper-case hex via GLOB (v5). Index `categories_parent_idx`. |
 | `accounts` | id, name (non-empty), type CHECK cash/bank, opening_balance_minor INT default 0, is_archived 0/1 |
 | `transactions` | id, type CHECK income/expense/oweIn/oweOut, amount_minor > 0, category_id NOT NULL → categories, account_id → accounts (nullable), occurred_at TEXT, note, party, due_at, owe_status CHECK pending/completed, completed_at. **Table CHECK:** income/expense ⇒ account_id NOT NULL and owe_status/due_at/completed_at NULL; oweIn/oweOut ⇒ owe_status NOT NULL and (pending ⇒ completed_at NULL; completed ⇒ completed_at & account_id NOT NULL). Indexes on occurred_at, category_id, account_id, (owe_status, due_at). |
 | `assets` | id, name (non-empty), acquired_on, purchase_amount_minor ≥0, current_value_minor ≥0, purchase_transaction_id UNIQUE → transactions, notes |
@@ -183,7 +184,7 @@ All immutable, `const` constructors, `id` is `int?` (null = not yet saved), `cop
 | `transfers` (added v2) | id, from_account_id, to_account_id (→ accounts, NOT NULL), amount_minor > 0, occurred_at, note, CHECK from ≠ to. Index on occurred_at. |
 | `app_settings` (added v2) | key TEXT PK, value TEXT. Seeded `currency=PKR`. `theme_mode` row inserted on first set. Defaults rows: `default_category:<kind>`, `default_account:<kind>` (kind = income/expense/oweIn/oweOut/tax/transferFrom/transferTo), `default_account_for_category:<categoryId>`; value = id as text. |
 
-**Migrations (`_upgradeSchema`):** `<2` → create transfers + app_settings; `<3` → `_seedDefaults`; `<4` → `ALTER TABLE tax_payments ADD COLUMN transaction_id` + unique index (skipped if the table is missing or already has the column).
+**Migrations (`_upgradeSchema`):** `<2` → create transfers + app_settings; `<3` → `_seedDefaults`; `<4` → `ALTER TABLE tax_payments ADD COLUMN transaction_id` + unique index (skipped if the table is missing or already has the column); `<5` → `ALTER TABLE categories ADD COLUMN icon` / `color` (each skipped if present or table missing).
 **Seeding (`_seedDefaults`, on create and v3 upgrade), idempotent via `INSERT … WHERE NOT EXISTS` (case-insensitive name, root level):**
 - income categories: Salary, Business, Bonus
 - expense categories: Food, Shopping, Phone, Donation, Gifts, Education
@@ -203,7 +204,7 @@ These are normal editable/deletable rows.
 | Repo | Table | Validation | Extra methods |
 |---|---|---|---|
 | `AccountRepository` | accounts | name non-empty | `balanceMinor(accountId)` (see §5.1) |
-| `CategoryRepository` | categories | name non-empty; parent must exist; on update: no cycle (walks parent chain), and new type must stay compatible with existing transactions' directions | `childrenOf(int? parentId)` (sorted name NOCASE; currently unused by UI) |
+| `CategoryRepository` | categories | name non-empty; color null or `^#[0-9a-fA-F]{6}$` (stored upper-cased by `toRow`); parent must exist; on update: no cycle (walks parent chain), and new type must stay compatible with existing transactions' directions | `childrenOf(int? parentId)` (sorted name NOCASE; currently unused by UI) |
 | `TransactionRepository` | transactions | amount > 0; category exists & direction-compatible (income/oweIn need income|both; expense/oweOut need expense|both); income/expense need account & no owe fields; owe needs status; pending ⇒ no completedAt; completed ⇒ completedAt + account | `completeOwe(id, accountId, {at})` (only pending → completed, sets account & completedAt=now), `pendingOwes({through})` (ordered due_at nulls last; `through` = due before date), `history({limit})` (occurred_at DESC, id DESC), **`saveWithTax(tx, {taxMinor})`** (validate, then one DB transaction: insert/update tx + upsert/delete its linked tax with the tx's account & date; owes can't carry tax), **`delete` override** (also deletes linked tax). Internally owns its own `CategoryRepository`. |
 | `TaxRepository` | tax_payments | amount > 0 | `paidInMonth(year, month)`, `history({limit})`, `forTransaction(id)` |
 | `TransferRepository` | transfers | amount > 0; from ≠ to | `history({limit})` |
@@ -219,10 +220,10 @@ Note: repos and services each construct their own repository instances over the 
   - `assetValueMinor`: sum of all `current_value_minor`.
   - `accounts`: `List<AccountOverview(account, balanceMinor)>` for **all** accounts (incl. archived), one balance query per account.
   - getter `totalBalanceMinor` = sum of account balances.
-- **`DashboardService.categoryTotals(DateTime month)` → `List<CategoryTotal{categoryId, name, isIncome, totalMinor}>`** — income/expense (not owes) grouped by category+type for that calendar month, `ORDER BY total DESC`. Used by Reports.
+- **`DashboardService.categoryTotals(DateTime month)` → `List<CategoryTotal{categoryId, name, isIncome, totalMinor, parentId, icon, color}>`** — income/expense (not owes) grouped by category+type for that calendar month, `ORDER BY total DESC`. Used by Reports.
 - `DashboardService.currentMonth(now: someMonth)` also works for past months (Reports passes the selected month).
 - **`ActivityService.history({limit})` → `List<ActivityItem>`** — merges transactions, **standalone** taxes, transfers; sorted by date DESC; `limit` applied per source then to merged list. Linked tax is not a row; it rides on its transaction as `taxMinor`.
-  - `ActivityItem { title, subtitle, amountMinor (signed), date, kind: ActivityKind{transaction,tax,transfer}, isPending, transaction?, tax?, transfer?, taxMinor, accountIds: Set<int>, accountName?, categoryId? }`; getters `note`, `party`, `netEffectMinor` (0 for transfers/pending, else amount − taxMinor), `effectOn(accountId)` (transfer ± by direction).
+  - `ActivityItem { title, subtitle, amountMinor (signed), date, kind: ActivityKind{transaction,tax,transfer}, isPending, transaction?, tax?, transfer?, taxMinor, accountIds: Set<int>, accountName?, categoryId?, categoryIcon?, categoryColor? }`; getters `note`, `party`, `netEffectMinor` (0 for transfers/pending, else amount − taxMinor), `effectOn(accountId)` (transfer ± by direction).
   - Transaction: title = category name; subtitle Income / Expense / "Owed to you" / "Received owe" / "You owe" / "Repaid owe"; amount + for income/oweIn, − for expense/oweOut; `isPending` if owe pending.
   - Tax: title "Tax payment", subtitle note or "Paid tax", amount negative, `tax` set.
   - Transfer: title "Transfer", subtitle & accountName "FromName → ToName", amount positive (shown neutral), `transfer` set.
@@ -272,12 +273,12 @@ All (except Splash) extend `BaseController` and call `refresh()` in constructor.
 | `SplashController` (plain ChangeNotifier) | ready, error | `initialize()` → `services.initialize()` |
 | `HomeController` | `summary: DashboardSummary?`, `recentActivity` (5) | `load()` (pull-to-refresh) |
 | `HistoryController(services, {accountId, categoryId, range, preset})` | `items`, `accounts`, `categories`, `filter: ActivityFilter{all, expense, income, transfer, owe, tax}`, `query`, `accountId`, `categoryId`, `range: DateRange?`, `preset: DatePreset{thisMonth,lastMonth,last3Months,thisYear,custom}?` | `setFilter/Query/Account/Category`, `setPreset(p,{now})`, `setRange`, `clearFilters` (not type/search); getters `visibleItems`, `activeFilterCount`, `isFiltering`, `selectedAccount/Category`, `totalsOf(items)` → (in, out) (per-account effect when account filtered). Tax filter = standalone tax OR `taxMinor>0`. Category filter includes all descendants. Search matches title/subtitle/note/party/accountName, and amounts ("1250", "1,250.5", "Rs 1250" → prefix of `amountInputText`, also tax). |
-| `ReportsController(services, {now})` | `period: ReportPeriod{month,sixMonths,year,custom}`, `range: DateRange`, `report: PeriodReport?`, `position: DashboardSummary?` (today), `categories` | `setPeriod` (resets to the current one), `setCustomRange`, `previous()`, `next()`; getters `canStep` (not custom), `canGoNext` (next period has started), `spending`/`earning` → `List<CategoryGroup{categoryId, name, isIncome, totalMinor, parts: [(name,total)]}>` (rolled up to top-level category; parts empty if only the parent itself). |
+| `ReportsController(services, {now})` | `period: ReportPeriod{month,sixMonths,year,custom}`, `range: DateRange`, `report: PeriodReport?`, `position: DashboardSummary?` (today), `categories` | `setPeriod` (resets to the current one), `setCustomRange`, `previous()`, `next()`; getters `canStep` (not custom), `canGoNext` (next period has started), `spending`/`earning` → `List<CategoryGroup{categoryId, name, isIncome, icon, color (root's), totalMinor, parts: [(name,total)]}>` (rolled up to top-level category; parts empty if only the parent itself). |
 | `TransactionController(services, {existing, existingTax, initialKind = expense})` | `kind`, `taxText`, `taxLoaded`, amountText, categoryId, accountId, occurredAt (now), dueAt, note, party, accounts (non-archived), `balances`, categories, `editing` | setters, `save()`, `remove()`; getters `isOwe`, `isTax`, `isIncome`, `availableCategories`, `pathFor()`, `selectedCategory`, `selectedAccount`. Auto-selects the only account on new entries. |
 | `TransferController(services, {existing})` | `editing`, accounts, `balances`, from/to ids, amountText, note, occurredAt | setters, `swap()`, `save()` (create/update), `remove()` |
 | `AccountController` | items, `balances: Map<int,int>` | `save({id,name,type,openingBalance(String),isArchived})`, `remove(id)` |
 | `AssetController` | items | `save({...})`, `remove(id)` |
-| `CategoryController` | items | `save({id,name,type,parentId})`, `remove(id)`, `pathFor()` |
+| `CategoryController` | items | `save({id,name,type,parentId,icon,color})`, `remove(id)`, `pathFor()` |
 | `OweController` | items (pending owes), accounts | `complete(id, accountId)`; getters `owedToMe`, `iOwe`, `owedToMeMinor`, `iOweMinor` |
 | `DefaultsController` | `defaults`, `accounts` (active), `categories` | `categoriesFor(kind)`, `sortedCategories`, `categoryFor(kind)`, `accountFor(kind)`, `accountForCategory(id)`, `setCategory`, `setAccount`, `setCategoryAccount` (each saves then reloads) |
 | `SettingsController` | currency, themeMode | `setCurrency(v)` (also sets `services.currencyCode` + `changed()`), `setThemeMode(v)` |
@@ -319,7 +320,7 @@ Flow: `main` → `SplashScreen` (brand mark, spinner; friendly error + "Try agai
 | `DefaultsScreen` | Settings › Defaults for new entries | AppBar 'Defaults', InfoNote (category wallet beats type wallet), sections Expense / Income / Someone owes me / I owe someone (Category + Wallet FormRows, clearable, placeholder "None"), Tax payment (Wallet), Transfer (From/To), then "Wallet for expense/income/shared categories" tiles (indented tree, trailing wallet or "None"). Pickers include "No default" (-1 sentinel). |
 | `AccountScreen` | Settings › Accounts, Home | AppBar + FAB "Add account". Total-in-active card, "Active" and "Archived" groups. Tap row → `AccountDetailScreen`. `showAccountEditor(context, {services, controller, existing}) → Future<bool deleted>` (top-level, reused by detail) opens `SheetScaffold`: Account name, Cash/Bank `SegmentedButton`, Starting balance (symbol prefix, helper), Archive switch (edit), Save, "Delete account" (confirm). |
 | `AssetScreen` | Settings › Assets, Home | AppBar + FAB "Add asset". Total value card, list with paid/date subtitle and gain/loss. Sheet: Name, Price paid / Worth today (row), Bought on, Notes, InfoNote, Save, Delete. Blank "worth today" = price paid. |
-| `CategoryScreen` | Settings › Categories, category picker footer | AppBar + FAB "Add category". Sections Expenses / Income / Used for both; tree order by path, indented 24dp per depth. Sheet: Name, Used for segmented, "Inside" FormRow → picker (Top level = -1 sentinel), Save, Delete. |
+| `CategoryScreen` | Settings › Categories, category picker footer | AppBar + FAB "Add category". Sections Expenses / Income / Used for both; tree order by path, indented 24dp per depth, rows lead with `CategoryBadge` (40, 32 for children). Sheet: live 56dp `CategoryBadge` preview + Name (rebuilds preview while typing), Used for segmented, GroupedCard[Icon ("Automatic"/"Custom" + preview, clearable → `showIconPickerSheet`), Color (swatch + hex or "Automatic", clearable → `showColorPickerSheet`, saved via `colorToHex`), Inside → picker (Top level = -1 sentinel)], Save, Delete. |
 | `OweScreen` | Settings › Money owed, Home owe cards | AppBar + FAB "Add" (openAddFlow). InfoNote, sections "Owed to you"/"You owe" with total in header; rows: party name, due/overdue (red "Overdue since …"). Tap → sheet "Mark as received/paid" with account radio list (preselects existing/only account), primary action, "Edit details" (→ TransactionScreen). |
 
 ### 6.5 Shared components (`lib/app/widgets/app_widgets.dart`)
@@ -331,7 +332,9 @@ Exports `formatters.dart` and `category_icons.dart`.
 - In `screens/activity_list.dart`: `ActivityDayGroups({items, services, accountId})`, `openActivity(context, services, item)` (transaction → TransactionScreen, tax → TransactionScreen(existingTax), transfer → TransferScreen(existing); "Saved" snackbar).
 - Feedback: `EmptyState({icon, title, message, actionLabel, onAction})`, `ErrorBanner(message?)`, `InfoNote(text)`, `showMessage(context, text)`, `confirmDelete(context, {title, message}) → Future<bool>`.
 - Sheets: `showAppSheet(context, builder)` (scroll-controlled, keyboard-aware), `SheetScaffold({title, subtitle, children, primaryLabel, onPrimary, error, busy, secondaryLabel, onSecondary, destructiveLabel, onDestructive})`, `showPickerSheet<T>(context, {title, options: List<PickerOption<T>{value,title,subtitle,icon,indent}>, selected, emptyMessage, footerLabel, onFooter}) → Future<T?>`, `BottomActionBar(child)`.
-- `categoryIcon(name, {income})` maps keywords (food, salary, phone, rent, fuel, health…) to Material icons, fallback `sell_outlined` / `south_west_rounded`.
+- **Category look** (`widgets/category_icons.dart`, exported by app_widgets): `categoryIconGroups` (9 labelled groups, ~90 icons; **keys are persisted — never rename**), `isCategoryIconKey`, `categoryIcon(name, {income, iconKey})` (chosen key, else keyword guess: food, salary, phone, rent, fuel, health…, fallback `sell_outlined`/`south_west_rounded`), `colorFromHex`/`colorToHex` (`#RRGGBB`), `categorySwatches` (12), `categoryColor(name, {hex})` (stored color or stable swatch from a name hash), `readableCategoryColor(color, brightness)` (lightens dark colors in dark mode, darkens pale ones in light mode), `CategoryBadge({name, iconKey, colorHex, income, size=40})` (tinted rounded square, alpha .14 light / .22 dark). Used by category list/pickers, transaction Category row & picker, History filter picker, Defaults, Reports breakdown (bar uses category color), and `ActivityTile` for income/expense (owes/tax/transfer keep semantic icons).
+- **Pickers** (`widgets/category_pickers.dart`): `showIconPickerSheet(context, {color, selected, automatic}) → String?` (`automaticIcon` = '' for "Automatic"; cells have Semantics labels = key with spaces), `showColorPickerSheet(context, {initial, icon}) → Color?` (SheetScaffold "Tag color": preview badge + swatch + Hex field (6 hex chars), `_SaturationValuePanel` (white→hue × transparent→black; tap/drag via separate vertical+horizontal drag recognizers so the sheet doesn't steal drags), `_HueSlider`, quick swatches, "Use this color").
+- `PickerOption` has `leading` (overrides `icon`); `FormRow` has `leading` (overrides `icon`) and `valueLeading` (before value text).
 
 ### 6.6 Theme & sizes
 - `AppTheme.light()/dark()` → `_build`: palette (`_Palette.light/dark`) mapped onto `ColorScheme.fromSeed(...).copyWith(...)` with all `surfaceContainer*` = surface (flat) and `surfaceContainerHighest` = field color. `AppColors` extension (`AppColors.of(context)`): income, expense, transfer, warning (+Container variants), neutralContainer.
@@ -348,8 +351,9 @@ Use `sqfliteFfiInit()` + `LocalDatabase(factory: databaseFactoryFfi[NoIsolate], 
 - `data_layer_test.dart`: seeded defaults; v2 upgrade; balances/owing/tax/dashboard; activity merge; **category totals by month** (excludes owes and other months).
 - `app_smoke_test.dart`: shell (Overview, Total balance, welcome card, nav, Add menu → Add expense / Transfer money, Reports, Settings); **end-to-end expense** (Add → Expense → amount 1250.5 → Category Food → Cash preselected → Save → "Saved", balance −125050); appearance segmented System/Light/Dark persisted.
 - `formatters_test.dart`: money grouping/symbols/signs, amountInputText, relative/long dates.
-- `features_test.dart` (plain `test`, `AppServices.withDatabase` + `_World` seed: Cash 10,000 + Bank, Food › Groceries; `_idle(controller)` polls `busy`): linked tax balances/move/clear/cascade + owes reject tax; v3→v4 column added; `ReportService.build` totals/accounts/months + category roll-up; report period stepping & labels; History filters (account totals, category tree, preset, tax, amount/text search); `DateRange` labels; **defaults** (storage, type/category/manual priority, tax & transfer, edit ignores, archived skipped, forget on delete).
-- `app_smoke_test.dart` also: expense **with tax 100** (summary note, balance −135050, `taxMinor`), and History Filters sheet → This month → "Show 1 results" → tap transfer → "Edit transfer"; Reports Year; Home account → AccountDetailScreen; Settings › Defaults pick Expense category Shopping → new expense prefilled Shopping + Cash.
+- `features_test.dart` (plain `test`, `AppServices.withDatabase` + `_World` seed: Cash 10,000 + Bank, Food › Groceries; `_idle(controller)` polls `busy`): linked tax balances/move/clear/cascade + owes reject tax; v3→v4 column added; `ReportService.build` totals/accounts/months + category roll-up; report period stepping & labels; History filters (account totals, category tree, preset, tax, amount/text search); `DateRange` labels; category icon/hex color storage, validation, propagation to activity & totals; color/icon helpers; **defaults** (storage, type/category/manual priority, tax & transfer, edit ignores, archived skipped, forget on delete).
+- `app_smoke_test.dart` also: expense **with tax 100** (summary note, balance −135050, `taxMinor`), and History Filters sheet → This month → "Show 1 results" → tap transfer → "Edit transfer"; Reports Year; Home account → AccountDetailScreen; Settings › Defaults pick Expense category Shopping → new expense prefilled Shopping + Cash; CategoryScreen → Food → Icon "local pizza" → Color hex 12ab9c → "#12AB9C" → Save persists `local_pizza`/`#12AB9C`.
+- `data_layer_test.dart` v2 upgrade also asserts `categories` gained `icon`/`color`.
 - The test font renders wide glyphs, so it catches text overflow (a real one in the balance card was fixed this way). For visual review, a temporary test can load Roboto from `<flutter>/bin/cache/artifacts/material_fonts` and `RenderRepaintBoundary.toImage()` screens to PNG.
 
 ---

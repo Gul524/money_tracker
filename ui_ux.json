@@ -163,7 +163,8 @@
     "showPickerSheet": "Bottom-sheet single choice list with check mark",
     "SheetScaffold": "Editor sheet: title, fields, error, full-width Save, optional neutral and destructive actions",
     "BottomActionBar": "Pinned primary button that rises above the keyboard",
-    "EmptyState / ErrorBanner / InfoNote": "Friendly empty, error and helper messaging"
+    "EmptyState / ErrorBanner / InfoNote": "Friendly empty, error and helper messaging",
+    "CategoryBadge": "Category icon in a rounded square tinted with the category's color (user-chosen, or a stable automatic swatch); adjusted for readability in light/dark"
   },
   "screens": {
     "splash": "Brand mark, name, tagline, small spinner; friendly retry on error; fades into the shell",
@@ -185,7 +186,7 @@
     "settings": "Preferences (Currency picker, Appearance segmented System/Light/Dark) → Manage (Accounts, Categories, Money owed, Assets) → About",
     "accounts": "Total card, Active and Archived groups; tap → account page",
     "assets": "Total value card, assets with gain/loss; sheet (name, price paid, worth today, bought on, notes, delete)",
-    "categories": "Expenses / Income / Both sections, indented tree; sheet (name, used-for segmented, Inside parent picker, delete)",
+    "categories": "Expenses / Income / Both sections, indented tree with colored category badges; sheet: live badge preview + name, used-for segmented, Icon (grouped icon grid, or Automatic), Color (any color: saturation/brightness panel, hue slider, hex input, quick swatches; stored as #RRGGBB), Inside parent picker, delete",
     "owe": "Owed to you / You owe sections with totals; overdue in red; tap → Mark as received/paid sheet with account choice and Edit details",
     "accountDetail": "Balance card (type, archived pill, starting balance) → This month Money in / Money out → Activity grouped by day with transfers shown ± for this account → Search opens History filtered to the account. Edit icon opens the account sheet (name, Cash/Bank, starting balance, archive, delete)"
   },
@@ -198,6 +199,7 @@
     "Archived accounts are hidden from pickers but kept in history",
     "Tax entered on an income or expense is paid from the same account on the same date and deleted with it",
     "Every History row (transaction, tax, transfer) opens an editor with delete",
-    "Report periods can't step past the current one"
+    "Report periods can't step past the current one",
+    "Categories are colorful everywhere they appear: lists, pickers, history rows and report bars use the category's color"
   ]
 }

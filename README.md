@@ -36,7 +36,7 @@ The design follows Material 3 and Apple's Human Interface Guidelines: neutral in
 | Reports | Month, 6 months, year or custom dates. Net, income, expenses and tax for the period; month-by-month chart; spending and income by category with subcategories (tap to see the entries); tax paid by account; money in and out per account; where you stand today, including net worth. |
 | Settings | Currency, appearance (System, Light, Dark), links to Accounts, Categories, Money owed, and Assets, and privacy information. |
 | Accounts | Active and archived cash and bank accounts with balances. Tap one to see its balance, this month's money in and out, and all its activity; edit, archive, or delete from there. |
-| Categories | Expense, income, and shared categories shown as an indented tree; rename, move, or delete. |
+| Categories | Expense, income, and shared categories shown as an indented tree; rename, move, or delete. Each category can have its own icon (from a grouped icon grid) and any tag color (color picker or hex), shown everywhere the category appears. |
 | Money owed | Pending amounts owed to you and by you, with overdue items in red; mark them as received or paid into an account. |
 | Assets | Things you own, their value, and gain or loss. |
 
@@ -66,7 +66,7 @@ lib/app/formatters.dart  Money and date formatting
 
 `LocalDatabase` owns the database connection and schema. Category, Account, Transaction, Asset, Tax, and Transfer repositories expose `create`, `getById`, `getAll`, `update`, and `delete`, plus focused queries. Shared behavior lives in `CrudRepository`. Screen controllers call repositories and services; screens pass user input to controllers and render their state. Screens are built only from the shared components in `app_widgets.dart`, so spacing and styling stay consistent.
 
-The SQLite schema is version 4. IDs link categories to their parent, transactions to categories/accounts, assets to optional purchase transactions, tax payments to accounts, and transfers to both accounts. Existing version 1–3 databases are upgraded in place (version 4 adds the tax-to-transaction link). Foreign keys are enabled on every connection.
+The SQLite schema is version 5. IDs link categories to their parent, transactions to categories/accounts, assets to optional purchase transactions, tax payments to accounts, and transfers to both accounts. Existing version 1–4 databases are upgraded in place (version 4 adds the tax-to-transaction link; version 5 adds category icon and hex color). Foreign keys are enabled on every connection.
 
 ## Development
 

@@ -23,6 +23,8 @@ class CategoryController extends BaseController {
     required String name,
     required CategoryType type,
     int? parentId,
+    String? icon,
+    String? color,
   }) async {
     final result = await run(() async {
       final value = Category(
@@ -30,6 +32,8 @@ class CategoryController extends BaseController {
         name: name,
         type: type,
         parentId: parentId,
+        icon: icon,
+        color: color,
       );
       if (id == null) {
         await services.categories.create(value);

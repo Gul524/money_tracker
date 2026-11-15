@@ -6,6 +6,7 @@ import 'package:money_tracker/app/screens/app_shell.dart';
 import 'package:money_tracker/app/screens/reports_screen.dart';
 import 'package:money_tracker/app/screens/settings_screen.dart';
 import 'package:money_tracker/app/screens/account_detail_screen.dart';
+import 'package:money_tracker/app/screens/category_screen.dart';
 import 'package:money_tracker/app/screens/defaults_screen.dart';
 import 'package:money_tracker/data/models/account.dart';
 import 'package:money_tracker/data/models/account_transfer.dart';
@@ -304,5 +305,50 @@ void main() {
     await _settle(tester);
     expect(find.text('Shopping'), findsOneWidget);
     expect(find.text('Cash'), findsOneWidget);
+  });
+
+  testWidgets('category icon and any hex color are chosen and saved', (
+    tester,
+  ) async {
+    _phoneSize(tester);
+    final services = _services();
+    addTearDown(services.close);
+    await tester.runAsync(services.initialize);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: CategoryScreen(services: services),
+      ),
+    );
+    await _settle(tester);
+
+    await tester.tap(find.text('Food'));
+    await tester.pumpAndSettle();
+    expect(find.text('Edit category'), findsOneWidget);
+
+    await tester.tap(find.text('Icon'));
+    await tester.pumpAndSettle();
+    expect(find.text('Choose an icon'), findsOneWidget);
+    await tester.tap(find.bySemanticsLabel('local pizza'));
+    await tester.pumpAndSettle();
+    expect(find.text('Custom'), findsOneWidget);
+
+    await tester.tap(find.text('Color'));
+    await tester.pumpAndSettle();
+    expect(find.text('Tag color'), findsOneWidget);
+    await tester.enterText(
+      find.ancestor(of: find.text('Hex'), matching: find.byType(TextField)),
+      '12ab9c',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Use this color'));
+    await tester.pumpAndSettle();
+    expect(find.text('#12AB9C'), findsOneWidget);
+
+    await tester.tap(find.text('Save'));
+    await _settle(tester);
+    final food = (await tester.runAsync(services.categories.getAll))!
+        .firstWhere((c) => c.name == 'Food');
+    expect((food.icon, food.color), ('local_pizza', '#12AB9C'));
   });
 }

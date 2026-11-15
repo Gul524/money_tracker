@@ -207,8 +207,16 @@ class FormRow extends StatelessWidget {
     this.placeholder = 'Choose',
     this.onTap,
     this.onClear,
+    this.leading,
+    this.valueLeading,
   });
   final IconData icon;
+
+  /// Replaces [icon] (e.g. a small [CategoryBadge]).
+  final Widget? leading;
+
+  /// Shown just before the value text (e.g. a color swatch).
+  final Widget? valueLeading;
   final String label;
   final String? value;
   final String placeholder;
@@ -227,26 +235,40 @@ class FormRow extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: SpaceSize.large),
           child: Row(
             children: [
-              Icon(
-                icon,
-                size: IconSize.large,
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
+              leading ??
+                  Icon(
+                    icon,
+                    size: IconSize.large,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
               const SizedBox(width: SpaceSize.large),
               Text(label, style: theme.textTheme.bodyLarge),
               const SizedBox(width: SpaceSize.medium),
               Expanded(
-                child: Text(
-                  hasValue ? value! : placeholder,
-                  textAlign: TextAlign.end,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodyLarge?.copyWith(
-                    color: hasValue
-                        ? theme.colorScheme.onSurface
-                        : theme.colorScheme.primary,
-                    fontWeight: hasValue ? FontWeight.w500 : FontWeight.w600,
-                  ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    if (valueLeading != null) ...[
+                      valueLeading!,
+                      const SizedBox(width: SpaceSize.small),
+                    ],
+                    Flexible(
+                      child: Text(
+                        hasValue ? value! : placeholder,
+                        textAlign: TextAlign.end,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyLarge?.copyWith(
+                          color: hasValue
+                              ? theme.colorScheme.onSurface
+                              : theme.colorScheme.primary,
+                          fontWeight: hasValue
+                              ? FontWeight.w500
+                              : FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               if (hasValue && onClear != null)
@@ -567,6 +589,9 @@ class ActivityTile extends StatelessWidget {
       },
     };
     final isTransfer = item.kind == ActivityKind.transfer;
+    // Income and expense rows wear their category's own icon and color.
+    final isCategoryEntry =
+        t?.type == TransactionType.income || t?.type == TransactionType.expense;
     final amount = isTransfer && accountId != null
         ? item.effectOn(accountId!)
         : item.amountMinor;
@@ -590,7 +615,14 @@ class ActivityTile extends StatelessWidget {
     ].join(' · ');
 
     return AppTile(
-      leading: IconBadge(icon, color: fg, background: bg),
+      leading: isCategoryEntry
+          ? CategoryBadge(
+              name: item.title,
+              iconKey: item.categoryIcon,
+              colorHex: item.categoryColor,
+              income: t!.type == TransactionType.income,
+            )
+          : IconBadge(icon, color: fg, background: bg),
       title: title,
       subtitle: detail,
       showChevron: false,
@@ -916,12 +948,16 @@ class PickerOption<T> {
     required this.title,
     this.subtitle,
     this.icon,
+    this.leading,
     this.indent = 0,
   });
   final T value;
   final String title;
   final String? subtitle;
   final IconData? icon;
+
+  /// Custom leading widget (e.g. a [CategoryBadge]); overrides [icon].
+  final Widget? leading;
   final int indent;
 }
 
@@ -991,9 +1027,11 @@ Future<T?> showPickerSheet<T>(
                       child: AppTile(
                         title: option.title,
                         subtitle: option.subtitle,
-                        leading: option.icon == null
-                            ? null
-                            : IconBadge(option.icon!),
+                        leading:
+                            option.leading ??
+                            (option.icon == null
+                                ? null
+                                : IconBadge(option.icon!)),
                         showChevron: false,
                         trailing: isSelected
                             ? Icon(

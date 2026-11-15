@@ -14,6 +14,8 @@ class CategoryRepository extends CrudRepository<Category> {
     name: row['name'] as String,
     type: CategoryType.values.byName(row['type'] as String),
     parentId: row['parent_id'] as int?,
+    icon: row['icon'] as String?,
+    color: row['color'] as String?,
   );
 
   @override
@@ -22,6 +24,8 @@ class CategoryRepository extends CrudRepository<Category> {
     'name': value.name.trim(),
     'type': value.type.name,
     'parent_id': value.parentId,
+    'icon': value.icon,
+    'color': value.color?.toUpperCase(),
   };
 
   @override
@@ -32,12 +36,17 @@ class CategoryRepository extends CrudRepository<Category> {
     if (value.name.trim().isEmpty) {
       throw ArgumentError('Category name is required');
     }
+    if (value.color != null && !_hex.hasMatch(value.color!)) {
+      throw ArgumentError('Color must be a hex value like #3F5BD9');
+    }
     if (updatingId != null) await _checkExistingTransactions(value, updatingId);
     if (value.parentId == null) return;
     final parent = await getById(value.parentId!);
     if (parent == null) throw ArgumentError('Parent category does not exist');
     if (updatingId != null) await _checkNoCycle(updatingId, parent);
   }
+
+  static final _hex = RegExp(r'^#[0-9a-fA-F]{6}$');
 
   Future<void> _checkExistingTransactions(Category value, int id) async {
     final db = await storage.database;

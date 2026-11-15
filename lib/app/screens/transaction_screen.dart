@@ -125,7 +125,12 @@ class _TransactionScreenState extends State<TransactionScreen> {
             subtitle: c.parentId == null
                 ? null
                 : controller.pathFor(c).replaceFirst(RegExp(r' / [^/]+$'), ''),
-            icon: categoryIcon(c.name, income: controller.isIncome),
+            leading: CategoryBadge(
+              name: c.name,
+              iconKey: c.icon,
+              colorHex: c.color,
+              income: controller.isIncome,
+            ),
           ),
       ],
       footerLabel: 'Manage categories',
@@ -217,11 +222,15 @@ class _TransactionScreenState extends State<TransactionScreen> {
               children: [
                 if (!controller.isTax)
                   FormRow(
-                    icon: category == null
-                        ? Icons.sell_outlined
-                        : categoryIcon(
-                            category.name,
+                    icon: Icons.sell_outlined,
+                    leading: category == null
+                        ? null
+                        : CategoryBadge(
+                            name: category.name,
+                            iconKey: category.icon,
+                            colorHex: category.color,
                             income: controller.isIncome,
+                            size: 28,
                           ),
                     label: 'Category',
                     value: category?.name,

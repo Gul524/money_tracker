@@ -111,6 +111,10 @@ void main() {
     expect(await categories.getAll(), hasLength(10));
     expect(await accounts.getAll(), hasLength(1));
     expect((await accounts.getAll()).single.openingBalanceMinor, 500);
+    final columns = await (await storage.database).rawQuery(
+      'PRAGMA table_info(categories)',
+    );
+    expect(columns.map((c) => c['name']), containsAll(['icon', 'color']));
     final gifts = (await categories.getAll()).singleWhere(
       (category) => category.name == 'Gifts',
     );

@@ -15,9 +15,13 @@ class CategoryTotal {
     required this.isIncome,
     required this.totalMinor,
     this.parentId,
+    this.icon,
+    this.color,
   });
   final int categoryId;
   final int? parentId;
+  final String? icon;
+  final String? color;
   final String name;
   final bool isIncome;
   final int totalMinor;
@@ -115,6 +119,7 @@ class DashboardService {
     final rows = await db.rawQuery(
       '''
       SELECT t.category_id AS id, c.name AS name, c.parent_id AS parent_id,
+        c.icon AS icon, c.color AS color,
         t.type AS type,
         SUM(t.amount_minor) AS total
       FROM transactions t JOIN categories c ON c.id = t.category_id
@@ -131,6 +136,8 @@ class DashboardService {
           categoryId: row['id'] as int,
           name: row['name'] as String,
           parentId: row['parent_id'] as int?,
+          icon: row['icon'] as String?,
+          color: row['color'] as String?,
           isIncome: row['type'] == 'income',
           totalMinor: row['total'] as int,
         ),

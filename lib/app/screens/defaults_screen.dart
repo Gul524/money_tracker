@@ -79,7 +79,12 @@ class _DefaultsScreenState extends State<DefaultsScreen> {
           PickerOption(
             value: c.id!,
             title: c.name,
-            icon: categoryIcon(c.name, income: income),
+            leading: CategoryBadge(
+              name: c.name,
+              iconKey: c.icon,
+              colorHex: c.color,
+              income: income,
+            ),
             indent: ' / '.allMatches(controller.pathFor(c)).length,
           ),
       ],
@@ -147,7 +152,12 @@ class _DefaultsScreenState extends State<DefaultsScreen> {
                   left: 24.0 * ' / '.allMatches(controller.pathFor(c)).length,
                 ),
                 child: AppTile(
-                  leading: IconBadge(categoryIcon(c.name, income: income)),
+                  leading: CategoryBadge(
+                    name: c.name,
+                    iconKey: c.icon,
+                    colorHex: c.color,
+                    income: income,
+                  ),
                   title: c.name,
                   trailing: Text(
                     controller.accountForCategory(c.id!)?.name ?? 'None',

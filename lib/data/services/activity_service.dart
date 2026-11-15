@@ -27,6 +27,8 @@ class ActivityItem {
     this.accountIds = const {},
     this.accountName,
     this.categoryId,
+    this.categoryIcon,
+    this.categoryColor,
   });
 
   final String title;
@@ -52,6 +54,10 @@ class ActivityItem {
   /// Display name of the account, e.g. `Cash` or `Cash → Bank`.
   final String? accountName;
   final int? categoryId;
+
+  /// The category's chosen icon key and `#RRGGBB` color (null = automatic).
+  final String? categoryIcon;
+  final String? categoryColor;
 
   String get note => switch (kind) {
     ActivityKind.transaction => transaction?.note ?? '',
@@ -98,9 +104,7 @@ class ActivityService {
     final transactions = await _transactions.history(limit: limit);
     final taxes = await _taxes.history();
     final transfers = await _transfers.history(limit: limit);
-    final categories = {
-      for (final c in await _categories.getAll()) c.id!: c.name,
-    };
+    final categories = {for (final c in await _categories.getAll()) c.id!: c};
     final accounts = {for (final a in await _accounts.getAll()) a.id!: a.name};
     final linkedTax = {
       for (final t in taxes)
@@ -111,7 +115,7 @@ class ActivityService {
     final items = <ActivityItem>[
       for (final t in transactions)
         ActivityItem(
-          title: categories[t.categoryId] ?? 'Category',
+          title: categories[t.categoryId]?.name ?? 'Category',
           subtitle: switch (t.type) {
             TransactionType.income => 'Income',
             TransactionType.expense => 'Expense',
@@ -135,6 +139,8 @@ class ActivityService {
           accountIds: {?t.accountId},
           accountName: t.accountId == null ? null : accounts[t.accountId],
           categoryId: t.categoryId,
+          categoryIcon: categories[t.categoryId]?.icon,
+          categoryColor: categories[t.categoryId]?.color,
         ),
       for (final t in limit == null ? standaloneTax : standaloneTax.take(limit))
         ActivityItem(

@@ -6,6 +6,7 @@ import '../app_services.dart';
 import '../app_sizes.dart';
 import '../controllers/category_controller.dart';
 import '../widgets/app_widgets.dart';
+import '../widgets/category_pickers.dart';
 
 const _typeLabels = {
   CategoryType.expense: 'Expense',
@@ -55,6 +56,8 @@ class _CategoryScreenState extends State<CategoryScreen> {
     var name = existing?.name ?? '';
     var type = existing?.type ?? CategoryType.expense;
     int? parentId = existing?.parentId;
+    String? icon = existing?.icon;
+    String? color = existing?.color;
 
     await showAppSheet<void>(
       context,
@@ -76,6 +79,8 @@ class _CategoryScreenState extends State<CategoryScreen> {
                   name: name,
                   type: type,
                   parentId: parentId,
+                  icon: icon,
+                  color: color,
                 );
                 if (ok && sheetContext.mounted) Navigator.pop(sheetContext);
               },
@@ -94,12 +99,26 @@ class _CategoryScreenState extends State<CategoryScreen> {
                 }
               },
               children: [
-                AppTextField(
-                  label: 'Name',
-                  hint: 'e.g. Groceries, Rent, Freelance',
-                  value: name,
-                  capitalization: TextCapitalization.words,
-                  onChanged: (v) => name = v,
+                Row(
+                  children: [
+                    CategoryBadge(
+                      name: name.isEmpty ? '?' : name,
+                      iconKey: icon,
+                      colorHex: color,
+                      income: type == CategoryType.income,
+                      size: 56,
+                    ),
+                    const SizedBox(width: SpaceSize.medium),
+                    Expanded(
+                      child: AppTextField(
+                        label: 'Name',
+                        hint: 'e.g. Groceries, Rent, Freelance',
+                        value: name,
+                        capitalization: TextCapitalization.words,
+                        onChanged: (v) => setSheetState(() => name = v),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: SpaceSize.large),
                 Text('Used for', style: Theme.of(context).textTheme.bodySmall),
@@ -116,7 +135,74 @@ class _CategoryScreenState extends State<CategoryScreen> {
                 ),
                 const SizedBox(height: SpaceSize.large),
                 GroupedCard(
+                  dividerIndent: 56,
                   children: [
+                    FormRow(
+                      icon: Icons.interests_outlined,
+                      label: 'Icon',
+                      value: icon == null ? 'Automatic' : 'Custom',
+                      valueLeading: Icon(
+                        categoryIcon(
+                          name,
+                          income: type == CategoryType.income,
+                          iconKey: icon,
+                        ),
+                        color: readableCategoryColor(
+                          categoryColor(name, hex: color),
+                          Theme.of(context).brightness,
+                        ),
+                      ),
+                      onClear: icon == null
+                          ? null
+                          : () => setSheetState(() => icon = null),
+                      onTap: () async {
+                        final picked = await showIconPickerSheet(
+                          context,
+                          color: categoryColor(name, hex: color),
+                          selected: icon,
+                          automatic: categoryIcon(
+                            name,
+                            income: type == CategoryType.income,
+                          ),
+                        );
+                        if (picked != null) {
+                          setSheetState(
+                            () =>
+                                icon = picked == automaticIcon ? null : picked,
+                          );
+                        }
+                      },
+                    ),
+                    FormRow(
+                      icon: Icons.palette_outlined,
+                      label: 'Color',
+                      value: color ?? 'Automatic',
+                      valueLeading: Container(
+                        width: 20,
+                        height: 20,
+                        decoration: BoxDecoration(
+                          color: categoryColor(name, hex: color),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      onTap: () async {
+                        final picked = await showColorPickerSheet(
+                          context,
+                          initial: categoryColor(name, hex: color),
+                          icon: categoryIcon(
+                            name,
+                            income: type == CategoryType.income,
+                            iconKey: icon,
+                          ),
+                        );
+                        if (picked != null) {
+                          setSheetState(() => color = colorToHex(picked));
+                        }
+                      },
+                      onClear: color == null
+                          ? null
+                          : () => setSheetState(() => color = null),
+                    ),
                     FormRow(
                       icon: Icons.account_tree_outlined,
                       label: 'Inside',
@@ -138,8 +224,10 @@ class _CategoryScreenState extends State<CategoryScreen> {
                                 PickerOption(
                                   value: c.id!,
                                   title: controller.pathFor(c),
-                                  icon: categoryIcon(
-                                    c.name,
+                                  leading: CategoryBadge(
+                                    name: c.name,
+                                    iconKey: c.icon,
+                                    colorHex: c.color,
                                     income: c.type == CategoryType.income,
                                   ),
                                 ),
@@ -176,8 +264,11 @@ class _CategoryScreenState extends State<CategoryScreen> {
               Padding(
                 padding: EdgeInsets.only(left: depth * 24.0),
                 child: AppTile(
-                  leading: IconBadge(
-                    categoryIcon(c.name, income: type == CategoryType.income),
+                  leading: CategoryBadge(
+                    name: c.name,
+                    iconKey: c.icon,
+                    colorHex: c.color,
+                    income: type == CategoryType.income,
                     size: depth == 0 ? 40 : 32,
                   ),
                   title: c.name,
@@ -219,7 +310,8 @@ class _CategoryScreenState extends State<CategoryScreen> {
             )
           else ...[
             const InfoNote(
-              'Tap a category to rename it or move it inside another one.',
+              'Tap a category to rename it, change its icon and color, or '
+              'move it inside another one.',
             ),
             _section('Expenses', CategoryType.expense),
             _section('Income', CategoryType.income),

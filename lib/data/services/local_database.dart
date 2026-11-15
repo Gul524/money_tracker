@@ -17,7 +17,7 @@ class LocalDatabase {
     _database = await _factory.openDatabase(
       databasePath,
       options: OpenDatabaseOptions(
-        version: 4,
+        version: 5,
         onConfigure: (db) async => db.execute('PRAGMA foreign_keys = ON'),
         onCreate: _createSchema,
         onUpgrade: _upgradeSchema,
@@ -38,6 +38,8 @@ class LocalDatabase {
         name TEXT NOT NULL,
         type TEXT NOT NULL CHECK(type IN ('income', 'expense', 'both')),
         parent_id INTEGER REFERENCES categories(id) ON DELETE RESTRICT,
+        icon TEXT,
+        color TEXT CHECK($_colorCheck),
         CHECK(length(trim(name)) > 0)
       )
     ''');
@@ -136,7 +138,25 @@ class LocalDatabase {
       );
       await _createTaxLinkIndex(db);
     }
+    if (oldVersion < 5) {
+      // User-chosen category icon key and tag color (#RRGGBB).
+      final columns = await db.rawQuery('PRAGMA table_info(categories)');
+      final names = columns.map((c) => c['name']).toSet();
+      if (columns.isNotEmpty && !names.contains('icon')) {
+        await db.execute('ALTER TABLE categories ADD COLUMN icon TEXT');
+      }
+      if (columns.isNotEmpty && !names.contains('color')) {
+        await db.execute(
+          'ALTER TABLE categories ADD COLUMN color TEXT CHECK($_colorCheck)',
+        );
+      }
+    }
   }
+
+  /// A stored color is NULL or `#RRGGBB` in upper-case hex.
+  static const _colorCheck =
+      "color IS NULL OR (length(color) = 7 AND color GLOB '#[0-9A-F][0-9A-F]"
+      "[0-9A-F][0-9A-F][0-9A-F][0-9A-F]')";
 
   Future<bool> _hasColumnlessTaxTable(Database db) async {
     final columns = await db.rawQuery('PRAGMA table_info(tax_payments)');

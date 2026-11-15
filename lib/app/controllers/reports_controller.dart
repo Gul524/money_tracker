@@ -12,10 +12,16 @@ class CategoryGroup {
     required this.categoryId,
     required this.name,
     required this.isIncome,
+    this.icon,
+    this.color,
   });
   final int categoryId;
   final String name;
   final bool isIncome;
+
+  /// The top-level category's chosen icon key and `#RRGGBB` color.
+  final String? icon;
+  final String? color;
   int totalMinor = 0;
 
   /// Totals of the subcategories (and the parent itself) inside this group,
@@ -124,6 +130,8 @@ class ReportsController extends BaseController {
           categoryId: rootId,
           name: root?.name ?? total.name,
           isIncome: income,
+          icon: root?.icon ?? total.icon,
+          color: root?.color ?? total.color,
         ),
       );
       group.totalMinor += total.totalMinor;

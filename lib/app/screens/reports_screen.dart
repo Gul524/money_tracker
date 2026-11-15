@@ -526,10 +526,8 @@ class _Breakdown extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colors = AppColors.of(context);
     if (groups.isEmpty) return _EmptyCard(emptyText);
     final sum = groups.fold<int>(0, (s, g) => s + g.totalMinor);
-    final barColor = income ? colors.income : theme.colorScheme.primary;
     return GroupedCard(
       children: [
         for (final g in groups)
@@ -543,7 +541,12 @@ class _Breakdown extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  IconBadge(categoryIcon(g.name, income: income)),
+                  CategoryBadge(
+                    name: g.name,
+                    iconKey: g.icon,
+                    colorHex: g.color,
+                    income: income,
+                  ),
                   const SizedBox(width: SpaceSize.medium),
                   Expanded(
                     child: Column(
@@ -573,7 +576,10 @@ class _Breakdown extends StatelessWidget {
                                 child: LinearProgressIndicator(
                                   value: g.totalMinor / sum,
                                   minHeight: 6,
-                                  color: barColor,
+                                  color: readableCategoryColor(
+                                    categoryColor(g.name, hex: g.color),
+                                    theme.brightness,
+                                  ),
                                 ),
                               ),
                             ),

@@ -1,6 +1,8 @@
 import 'dart:io';
 
+import 'package:flutter/material.dart' show Color, Icons;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:money_tracker/app/widgets/category_icons.dart';
 import 'package:money_tracker/app/app_services.dart';
 import 'package:money_tracker/app/controllers/base_controller.dart';
 import 'package:money_tracker/app/controllers/history_controller.dart';
@@ -505,5 +507,59 @@ void main() {
     expect(after.categoryByKind.containsKey('expense'), isFalse);
     expect(after.accountByKind.containsKey('expense'), isFalse);
     expect(after.accountByKind[DefaultKind.tax], w.bank.id);
+  });
+
+  test('categories store an icon and an upper-case hex color', () async {
+    final w = await _World.create();
+    addTearDown(w.services.close);
+    final saved = await w.services.categories.create(
+      const Category(
+        name: 'Coffee',
+        type: CategoryType.expense,
+        icon: 'local_cafe',
+        color: '#a1b2c3',
+      ),
+    );
+    final loaded = await w.services.categories.getById(saved.id!);
+    expect(loaded!.icon, 'local_cafe');
+    expect(loaded.color, '#A1B2C3');
+    for (final bad in ['red', '#12345', '#GGGGGG', '123456']) {
+      await expectLater(
+        w.services.categories.create(
+          Category(name: 'Bad', type: CategoryType.expense, color: bad),
+        ),
+        throwsArgumentError,
+        reason: bad,
+      );
+    }
+
+    // Activity rows and report totals carry the look.
+    await w.add(
+      TransactionType.expense,
+      500,
+      loaded,
+      w.cash,
+      DateTime(2026, 11, 3),
+    );
+    final row = (await w.services.activity.history()).single;
+    expect((row.categoryIcon, row.categoryColor), ('local_cafe', '#A1B2C3'));
+    final total = (await w.services.dashboard.categoryTotals(
+      DateTime(2026, 11),
+    )).single;
+    expect((total.icon, total.color), ('local_cafe', '#A1B2C3'));
+  });
+
+  test('category color and icon helpers', () {
+    expect(colorFromHex('#3F5BD9'), const Color(0xFF3F5BD9));
+    expect(colorFromHex('3f5bd9'), const Color(0xFF3F5BD9));
+    expect(colorFromHex('#12345'), isNull);
+    expect(colorToHex(const Color(0xFF0A0B0C)), '#0A0B0C');
+    expect(categoryColor('Food', hex: '#112233'), const Color(0xFF112233));
+    // Automatic colors are stable and come from the swatches.
+    expect(categoryColor('Food'), categoryColor(' food '));
+    expect(categorySwatches, contains(categoryColor('Rent')));
+    expect(categoryIcon('Anything', iconKey: 'pets'), Icons.pets_outlined);
+    expect(categoryIcon('Food', iconKey: 'unknown'), Icons.restaurant_outlined);
+    expect(isCategoryIconKey('local_cafe'), isTrue);
   });
 }

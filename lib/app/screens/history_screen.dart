@@ -358,7 +358,12 @@ class _FilterSheet extends StatelessWidget {
               CategoryType.expense => 'Expense',
               CategoryType.both => 'Income and expense',
             },
-            icon: categoryIcon(c.name, income: c.type == CategoryType.income),
+            leading: CategoryBadge(
+              name: c.name,
+              iconKey: c.icon,
+              colorHex: c.color,
+              income: c.type == CategoryType.income,
+            ),
             indent: ' / '.allMatches(controller.pathFor(c)).length,
           ),
       ],
