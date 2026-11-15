@@ -10,6 +10,7 @@ import 'package:money_tracker/app/screens/category_screen.dart';
 import 'package:money_tracker/app/screens/defaults_screen.dart';
 import 'package:money_tracker/data/models/account.dart';
 import 'package:money_tracker/data/models/account_transfer.dart';
+import 'package:money_tracker/data/models/category.dart';
 import 'package:money_tracker/data/models/model_types.dart';
 import 'package:money_tracker/data/services/local_database.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -305,6 +306,43 @@ void main() {
     await _settle(tester);
     expect(find.text('Shopping'), findsOneWidget);
     expect(find.text('Cash'), findsOneWidget);
+  });
+
+  testWidgets('subcategories show their parent category', (tester) async {
+    _phoneSize(tester);
+    final services = _services();
+    addTearDown(services.close);
+    await tester.runAsync(() async {
+      await services.initialize();
+      final food = (await services.categories.getAll()).firstWhere(
+        (c) => c.name == 'Food',
+      );
+      final groceries = await services.categories.create(
+        Category(
+          name: 'Groceries',
+          type: CategoryType.expense,
+          parentId: food.id,
+        ),
+      );
+      await services.categories.create(
+        Category(
+          name: 'Fruit',
+          type: CategoryType.expense,
+          parentId: groceries.id,
+        ),
+      );
+    });
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: CategoryScreen(services: services),
+      ),
+    );
+    await _settle(tester);
+
+    expect(find.text('Groceries'), findsOneWidget);
+    expect(find.text('Inside Food'), findsOneWidget);
+    expect(find.text('Inside Food / Groceries'), findsOneWidget);
   });
 
   testWidgets('category icon and any hex color are chosen and saved', (
