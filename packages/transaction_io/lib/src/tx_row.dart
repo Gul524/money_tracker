@@ -44,6 +44,8 @@ class TxRow {
     this.owedCompleted,
     this.owedStatus,
     this.taxMinor = 0,
+    this.oweWallet = '',
+    this.item = '',
     this.sourceRow,
   });
 
@@ -72,6 +74,14 @@ class TxRow {
 
   /// Tax paid together with an income or expense.
   final int taxMinor;
+
+  /// Owes only: the wallet money was lent from (Owed to me) or borrowed into
+  /// (I owe) when the owe started. Empty when no money moved then.
+  final String oweWallet;
+
+  /// A thing linked to the entry: bought with an Expense, received in an
+  /// I owe, or given in an Owed to me. Empty when none.
+  final String item;
 
   /// 1-based spreadsheet row this came from (imports only).
   final int? sourceRow;

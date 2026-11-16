@@ -14,6 +14,10 @@ import 'package:money_tracker/data/services/defaults_service.dart';
 import 'package:money_tracker/app/date_range.dart';
 import 'package:money_tracker/data/models/account.dart';
 import 'package:money_tracker/data/models/account_transfer.dart';
+import 'package:money_tracker/app/controllers/asset_controller.dart';
+import 'package:money_tracker/data/models/asset.dart';
+import 'package:money_tracker/data/repo/transaction_repository.dart';
+import 'package:money_tracker/data/services/report_service.dart';
 import 'package:money_tracker/data/models/category.dart';
 import 'package:money_tracker/data/models/model_types.dart';
 import 'package:money_tracker/data/models/money_transaction.dart';
@@ -561,5 +565,384 @@ void main() {
     expect(categoryIcon('Anything', iconKey: 'pets'), Icons.pets_outlined);
     expect(categoryIcon('Food', iconKey: 'unknown'), Icons.restaurant_outlined);
     expect(isCategoryIconKey('local_cafe'), isTrue);
+  });
+
+  group('two-way owes', () {
+    Future<MoneyTransaction> owe(
+      _World w,
+      TransactionType type,
+      int amount, {
+      Account? via,
+      OweItem? item,
+      int? id,
+    }) => w.services.transactions.saveWithTax(
+      MoneyTransaction(
+        id: id,
+        type: type,
+        amountMinor: amount,
+        categoryId: type == TransactionType.oweIn ? w.salary.id! : w.food.id!,
+        occurredAt: DateTime(2026, 11, 10),
+        oweStatus: OweStatus.pending,
+        party: 'Ali',
+        exchangeAccountId: via?.id,
+      ),
+      item: item,
+    );
+
+    test(
+      'money lent leaves a wallet now and comes back when received',
+      () async {
+        final w = await _World.create();
+        addTearDown(w.services.close);
+        final s = w.services;
+        final loan = await owe(w, TransactionType.oweIn, 500000, via: w.cash);
+        expect(await s.accounts.balanceMinor(w.cash.id!), 500000);
+
+        var item = (await s.activity.history()).single;
+        expect(item.linkLabel, 'Lent from Cash');
+        expect(item.netEffectMinor, -500000);
+        expect(item.effectOn(w.cash.id!), -500000);
+        expect(item.accountIds, {w.cash.id});
+
+        await s.transactions.completeOwe(
+          loan.id!,
+          w.bank.id!,
+          at: DateTime(2026, 11, 20),
+        );
+        expect(await s.accounts.balanceMinor(w.cash.id!), 500000);
+        expect(await s.accounts.balanceMinor(w.bank.id!), 500000);
+        item = (await s.activity.history()).single;
+        expect(item.netEffectMinor, 0);
+        expect(item.effectOn(w.bank.id!), 500000);
+
+        final report = await ReportService(s.database)
+            .build(DateTime(2026, 11), DateTime(2026, 12));
+        expect(report.lentMinor, 500000);
+        expect((report.incomeMinor, report.expenseMinor), (0, 0));
+        final cash = report.accounts.firstWhere(
+          (f) => f.account.id == w.cash.id,
+        );
+        final bank = report.accounts.firstWhere(
+          (f) => f.account.id == w.bank.id,
+        );
+        expect((cash.outMinor, bank.inMinor), (500000, 500000));
+      },
+    );
+
+    test('money borrowed arrives now and leaves when repaid', () async {
+      final w = await _World.create();
+      addTearDown(w.services.close);
+      final s = w.services;
+      final debt = await owe(w, TransactionType.oweOut, 300000, via: w.bank);
+      expect(await s.accounts.balanceMinor(w.bank.id!), 300000);
+      expect(
+        (await s.activity.history()).single.linkLabel,
+        'Borrowed into Bank',
+      );
+      await s.transactions.completeOwe(debt.id!, w.bank.id!);
+      expect(await s.accounts.balanceMinor(w.bank.id!), 0);
+      // Deleting it undoes both sides; the wallet can then be deleted.
+      await s.transactions.delete(debt.id!);
+      await s.accounts.delete(w.bank.id!);
+    });
+
+    test('only owes carry an exchange, and money or item, not both', () async {
+      final w = await _World.create();
+      addTearDown(w.services.close);
+      await expectLater(
+        w.services.transactions.saveWithTax(
+          MoneyTransaction(
+            type: TransactionType.income,
+            amountMinor: 100,
+            categoryId: w.salary.id!,
+            accountId: w.cash.id,
+            occurredAt: DateTime(2026, 11, 1),
+            exchangeAccountId: w.bank.id,
+          ),
+        ),
+        throwsArgumentError,
+      );
+      await expectLater(
+        owe(
+          w,
+          TransactionType.oweOut,
+          100,
+          via: w.cash,
+          item: const OweItem.received('Phone'),
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test(
+      'an item given away leaves your assets until the entry goes',
+      () async {
+        final w = await _World.create();
+        addTearDown(w.services.close);
+        final s = w.services;
+        final ring = await s.assets.create(
+          Asset(
+            name: 'Ring',
+            acquiredOn: DateTime(2026),
+            purchaseAmountMinor: 200000,
+            currentValueMinor: 250000,
+          ),
+        );
+        final sale = await owe(
+          w,
+          TransactionType.oweIn,
+          250000,
+          item: OweItem.given(ring.id!),
+        );
+        expect((await s.assets.getById(ring.id!))!.givenTransactionId, sale.id);
+        var summary = await s.dashboard.currentMonth(now: DateTime(2026, 11));
+        expect((summary.assetValueMinor, summary.oweInMinor), (0, 250000));
+        expect(await s.accounts.balanceMinor(w.cash.id!), 1000000);
+        expect((await s.activity.history()).single.linkLabel, 'Gave Ring');
+
+        // The same item can't be given twice.
+        await expectLater(
+          owe(w, TransactionType.oweIn, 1, item: OweItem.given(ring.id!)),
+          throwsArgumentError,
+        );
+        // Clearing the item in an edit brings it back.
+        await owe(w, TransactionType.oweIn, 250000, id: sale.id);
+        expect((await s.assets.getById(ring.id!))!.isGivenAway, isFalse);
+        await owe(
+          w,
+          TransactionType.oweIn,
+          250000,
+          id: sale.id,
+          item: OweItem.given(ring.id!),
+        );
+        await s.transactions.delete(sale.id!);
+        expect((await s.assets.getById(ring.id!))!.isGivenAway, isFalse);
+        summary = await s.dashboard.currentMonth(now: DateTime(2026, 11));
+        expect(summary.assetValueMinor, 250000);
+      },
+    );
+
+    test('an item received is kept as an asset in step with the owe', () async {
+      final w = await _World.create();
+      addTearDown(w.services.close);
+      final s = w.services;
+      final debt = await owe(
+        w,
+        TransactionType.oweOut,
+        8000000,
+        item: const OweItem.received('Laptop'),
+      );
+      var laptop = (await s.assets.purchasedWith(debt.id!))!;
+      expect((laptop.name, laptop.purchaseAmountMinor), ('Laptop', 8000000));
+      expect(laptop.currentValueMinor, 8000000);
+      expect(await s.accounts.balanceMinor(w.cash.id!), 1000000);
+      expect((await s.activity.history()).single.linkLabel, 'Got Laptop');
+
+      await owe(
+        w,
+        TransactionType.oweOut,
+        9000000,
+        id: debt.id,
+        item: const OweItem.received('Laptop Pro'),
+      );
+      laptop = (await s.assets.getById(laptop.id!))!;
+      expect(
+        (laptop.name, laptop.purchaseAmountMinor, laptop.currentValueMinor),
+        ('Laptop Pro', 9000000, 9000000),
+      );
+      expect(await s.assets.getAll(), hasLength(1));
+
+      // Deleting the owe keeps the asset, unlinked.
+      await s.transactions.delete(debt.id!);
+      laptop = (await s.assets.getById(laptop.id!))!;
+      expect(laptop.purchaseTransactionId, isNull);
+    });
+
+    test('owe form records money or an item and loads it back', () async {
+      final w = await _World.create();
+      addTearDown(w.services.close);
+      final s = w.services;
+      final form = TransactionController(s, initialKind: EntryKind.oweIn);
+      addTearDown(form.dispose);
+      await _idle(form);
+      form
+        ..setAmount('1000')
+        ..setCategory(w.salary.id)
+        ..setExchange(OweExchange.money);
+      expect(await form.save(), isFalse);
+      expect(form.error, 'Choose the wallet the money left');
+      form.setExchangeAccount(w.cash.id);
+      expect(await form.save(), isTrue);
+      expect(await s.accounts.balanceMinor(w.cash.id!), 1000000 - 100000);
+
+      final saved = (await s.transactions.pendingOwes()).single;
+      final edit = TransactionController(s, existing: saved);
+      addTearDown(edit.dispose);
+      await _idle(edit);
+      expect(edit.exchange, OweExchange.money);
+      expect(edit.exchangeAccountId, w.cash.id);
+      // Switching to "None" undoes the money movement.
+      edit.setExchange(OweExchange.none);
+      expect(await edit.save(), isTrue);
+      expect(await s.accounts.balanceMinor(w.cash.id!), 1000000);
+
+      final got = TransactionController(s, initialKind: EntryKind.oweOut);
+      addTearDown(got.dispose);
+      await _idle(got);
+      got
+        ..setAmount('500')
+        ..setCategory(w.food.id)
+        ..setExchange(OweExchange.item)
+        ..setReceivedItem('Bicycle');
+      expect(await got.save(), isTrue);
+      final bike = (await s.assets.getAll()).single;
+      expect((bike.name, bike.purchaseAmountMinor), ('Bicycle', 50000));
+      final again = TransactionController(
+        s,
+        existing: await s.transactions.getById(bike.purchaseTransactionId!),
+      );
+      addTearDown(again.dispose);
+      await _idle(again);
+      expect(again.exchange, OweExchange.item);
+      expect(again.receivedItem, 'Bicycle');
+    });
+
+    test(
+      'assets can be paid from a wallet, bought on credit or just owned',
+      () async {
+        final w = await _World.create();
+        addTearDown(w.services.close);
+        final s = w.services;
+        final c = AssetController(s);
+        addTearDown(c.dispose);
+        await _idle(c);
+
+        Future<bool> save(
+          String name,
+          String price, {
+          int? id,
+          AssetSource source = AssetSource.owned,
+          int? accountId,
+          String party = '',
+        }) => c.save(
+          id: id,
+          name: name,
+          purchaseAmount: price,
+          currentValue: price,
+          acquiredOn: DateTime(2026, 11, 2),
+          source: source,
+          accountId: accountId,
+          categoryId: source == AssetSource.owned ? null : w.food.id,
+          party: party,
+        );
+
+        expect(await save('Watch', '300', source: AssetSource.paid), isFalse);
+        expect(c.error, 'Choose the wallet you paid from');
+        expect(
+          await save(
+            'Watch',
+            '300',
+            source: AssetSource.paid,
+            accountId: w.cash.id,
+          ),
+          isTrue,
+        );
+        expect(await s.accounts.balanceMinor(w.cash.id!), 1000000 - 30000);
+        await _idle(c);
+        final watch = c.items.single;
+        expect(c.sourceOf(watch), AssetSource.paid);
+        expect((await s.activity.history()).single.linkLabel, 'Bought Watch');
+
+        // Editing the price keeps the expense in step.
+        expect(
+          await save(
+            'Watch',
+            '350',
+            id: watch.id,
+            source: AssetSource.paid,
+            accountId: w.cash.id,
+          ),
+          isTrue,
+        );
+        expect(await s.accounts.balanceMinor(w.cash.id!), 1000000 - 35000);
+
+        expect(
+          await save(
+            'Sofa',
+            '900',
+            source: AssetSource.owed,
+            party: 'Furniture shop',
+          ),
+          isTrue,
+        );
+        final debt = (await s.transactions.pendingOwes()).single;
+        expect(
+          (debt.type, debt.amountMinor, debt.party),
+          (TransactionType.oweOut, 90000, 'Furniture shop'),
+        );
+        expect(await s.accounts.balanceMinor(w.cash.id!), 1000000 - 35000);
+        await _idle(c);
+        expect(c.ownedValueMinor, 35000 + 90000);
+
+        // "Had it": no entry is created.
+        expect(await save('Old chair', '50'), isTrue);
+        expect(await s.transactions.getAll(), hasLength(2));
+      },
+    );
+
+    test('version 5 databases gain the owe link columns', () async {
+      final dir = await Directory.systemTemp.createTemp('money_tracker_v5_');
+      addTearDown(() => dir.delete(recursive: true));
+      final path = '${dir.path}/v5.db';
+      final legacy = await databaseFactoryFfi.openDatabase(
+        path,
+        options: OpenDatabaseOptions(
+          version: 5,
+          onCreate: (db, _) async {
+            await db.execute('''
+              CREATE TABLE accounts (id INTEGER PRIMARY KEY, name TEXT NOT NULL,
+                type TEXT NOT NULL, opening_balance_minor INTEGER NOT NULL DEFAULT 0,
+                is_archived INTEGER NOT NULL DEFAULT 0)
+            ''');
+            await db.execute('''
+              CREATE TABLE transactions (id INTEGER PRIMARY KEY, type TEXT NOT NULL,
+                amount_minor INTEGER NOT NULL, category_id INTEGER NOT NULL,
+                account_id INTEGER, occurred_at TEXT NOT NULL, note TEXT,
+                party TEXT, due_at TEXT, owe_status TEXT, completed_at TEXT)
+            ''');
+            await db.execute('''
+              CREATE TABLE assets (id INTEGER PRIMARY KEY, name TEXT NOT NULL,
+                acquired_on TEXT NOT NULL, purchase_amount_minor INTEGER NOT NULL,
+                current_value_minor INTEGER NOT NULL,
+                purchase_transaction_id INTEGER UNIQUE, notes TEXT)
+            ''');
+            await db.insert('accounts', {'name': 'Cash', 'type': 'cash'});
+          },
+        ),
+      );
+      await legacy.close();
+
+      final storage = LocalDatabase(factory: databaseFactoryFfi, path: path);
+      addTearDown(storage.close);
+      final db = await storage.database;
+      Future<List<Object?>> columns(String table) async =>
+          (await db.rawQuery('PRAGMA table_info($table)'))
+              .map((c) => c['name'])
+              .toList();
+      expect(await columns('transactions'), contains('exchange_account_id'));
+      expect(await columns('assets'), contains('given_transaction_id'));
+      // The column check keeps money lent/borrowed on owes only.
+      await expectLater(
+        db.insert('transactions', {
+          'type': 'income',
+          'amount_minor': 1,
+          'category_id': 1,
+          'account_id': 1,
+          'occurred_at': '2026-11-01',
+          'exchange_account_id': 1,
+        }),
+        throwsA(anything),
+      );
+    });
   });
 }

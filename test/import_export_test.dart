@@ -8,6 +8,8 @@ import 'package:money_tracker/app/app_theme.dart';
 import 'package:money_tracker/app/screens/import_export_screen.dart';
 import 'package:money_tracker/data/models/account.dart';
 import 'package:money_tracker/data/models/account_transfer.dart';
+import 'package:money_tracker/data/models/asset.dart';
+import 'package:money_tracker/data/repo/transaction_repository.dart';
 import 'package:money_tracker/data/models/category.dart';
 import 'package:money_tracker/data/models/model_types.dart';
 import 'package:money_tracker/data/models/money_transaction.dart';
@@ -245,9 +247,7 @@ void main() {
     await settle();
     expect(find.text('${DateTime.now().year}'), findsOneWidget);
 
-    await tester.tap(
-      find.widgetWithText(FilledButton, 'Export to Excel'),
-    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Export to Excel'));
     await settle();
     await settle();
     expect(files.saved.keys.single, startsWith('transactions_'));
@@ -260,6 +260,90 @@ void main() {
     expect(find.text('Last import'), findsOneWidget);
     expect(find.text('Skipped as duplicates'), findsOneWidget);
     expect(find.textContaining('Imported 0, skipped 1'), findsOneWidget);
+  });
+
+  test('owe wallets and items survive a round trip', () async {
+    final source = await _services();
+    addTearDown(source.close);
+    final cats = await source.categories.getAll();
+    final food = cats.firstWhere((c) => c.name == 'Food');
+    final salary = cats.firstWhere((c) => c.name == 'Salary');
+    final at = DateTime(2026, 11, 10, 8);
+    MoneyTransaction owe(TransactionType type, int amount, {int? via}) =>
+        MoneyTransaction(
+          type: type,
+          amountMinor: amount,
+          categoryId: type == TransactionType.oweIn ? salary.id! : food.id!,
+          occurredAt: at,
+          party: 'Ali',
+          oweStatus: OweStatus.pending,
+          exchangeAccountId: via,
+        );
+    await source.transactions.saveWithTax(
+      owe(TransactionType.oweIn, 40000, via: 1),
+    );
+    final ring = await source.assets.create(
+      Asset(
+        name: 'Ring',
+        acquiredOn: DateTime(2025),
+        purchaseAmountMinor: 9000,
+        currentValueMinor: 9000,
+      ),
+    );
+    await source.transactions.saveWithTax(
+      owe(TransactionType.oweIn, 9000),
+      item: OweItem.given(ring.id!),
+    );
+    await source.transactions.saveWithTax(
+      owe(TransactionType.oweOut, 70000),
+      item: const OweItem.received('Laptop'),
+    );
+    final desk = await source.transactions.saveWithTax(
+      MoneyTransaction(
+        type: TransactionType.expense,
+        amountMinor: 15000,
+        categoryId: food.id!,
+        accountId: 1,
+        occurredAt: at,
+      ),
+    );
+    await source.assets.create(
+      Asset(
+        name: 'Desk',
+        acquiredOn: at,
+        purchaseAmountMinor: 15000,
+        currentValueMinor: 15000,
+        purchaseTransactionId: desk.id,
+      ),
+    );
+
+    final exported = await exportTransactions(
+      AppTransactionIoStore(source.database),
+    );
+    final target = await _services();
+    addTearDown(target.close);
+    final summary = await importTransactions(
+      AppTransactionIoStore(target.database),
+      exported.bytes,
+    );
+    expect(summary.issues, isEmpty);
+    expect(summary.imported, 4);
+
+    expect(await _balances(target), await _balances(source));
+    final assets = {for (final a in await target.assets.getAll()) a.name: a};
+    expect(assets.keys.toSet(), {'Ring', 'Laptop', 'Desk'});
+    expect(assets['Ring']!.isGivenAway, isTrue);
+    expect(assets['Laptop']!.purchaseTransactionId, isNotNull);
+    expect(assets['Desk']!.purchaseTransactionId, isNotNull);
+    final lent = (await target.transactions.getAll()).where(
+      (t) => t.exchangeAccountId != null,
+    );
+    expect(lent.single.amountMinor, 40000);
+    final position = await target.dashboard.currentMonth(now: at);
+    expect(
+      position.assetValueMinor,
+      (await source.dashboard.currentMonth(now: at)).assetValueMinor,
+    );
   });
 }
 

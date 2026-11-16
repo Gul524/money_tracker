@@ -178,28 +178,54 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       ),
                     ),
                     if (report.oweReceivedMinor > 0 ||
-                        report.oweRepaidMinor > 0) ...[
-                      const SectionHeader('Money owed settled'),
+                        report.oweRepaidMinor > 0 ||
+                        report.lentMinor > 0 ||
+                        report.borrowedMinor > 0) ...[
+                      const SectionHeader('Money owed'),
                       GroupedCard(
                         children: [
-                          AppTile(
-                            leading: const IconBadge(
-                              Icons.call_received_rounded,
+                          if (report.lentMinor > 0)
+                            AppTile(
+                              leading: const IconBadge(
+                                Icons.north_east_rounded,
+                              ),
+                              title: 'Lent out',
+                              trailing: AmountText(
+                                report.lentMinor,
+                                currency: currency,
+                              ),
                             ),
-                            title: 'Received back',
-                            trailing: AmountText(
-                              report.oweReceivedMinor,
-                              currency: currency,
+                          if (report.borrowedMinor > 0)
+                            AppTile(
+                              leading: const IconBadge(
+                                Icons.south_west_rounded,
+                              ),
+                              title: 'Borrowed',
+                              trailing: AmountText(
+                                report.borrowedMinor,
+                                currency: currency,
+                              ),
                             ),
-                          ),
-                          AppTile(
-                            leading: const IconBadge(Icons.call_made_rounded),
-                            title: 'Paid back',
-                            trailing: AmountText(
-                              report.oweRepaidMinor,
-                              currency: currency,
+                          if (report.oweReceivedMinor > 0)
+                            AppTile(
+                              leading: const IconBadge(
+                                Icons.call_received_rounded,
+                              ),
+                              title: 'Received back',
+                              trailing: AmountText(
+                                report.oweReceivedMinor,
+                                currency: currency,
+                              ),
                             ),
-                          ),
+                          if (report.oweRepaidMinor > 0)
+                            AppTile(
+                              leading: const IconBadge(Icons.call_made_rounded),
+                              title: 'Paid back',
+                              trailing: AmountText(
+                                report.oweRepaidMinor,
+                                currency: currency,
+                              ),
+                            ),
                         ],
                       ),
                     ],

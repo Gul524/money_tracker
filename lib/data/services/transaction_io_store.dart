@@ -2,11 +2,13 @@ import 'package:transaction_io/transaction_io.dart';
 
 import '../models/account.dart';
 import '../models/account_transfer.dart';
+import '../models/asset.dart';
 import '../models/category.dart';
 import '../models/model_types.dart';
 import '../models/money_transaction.dart';
 import '../models/tax_payment.dart';
 import '../repo/account_repository.dart';
+import '../repo/asset_repository.dart';
 import '../repo/category_repository.dart';
 import '../repo/tax_repository.dart';
 import '../repo/transaction_repository.dart';
@@ -22,9 +24,11 @@ class AppTransactionIoStore implements TransactionIoStore {
       _categories = CategoryRepository(storage),
       _transactions = TransactionRepository(storage),
       _taxes = TaxRepository(storage),
-      _transfers = TransferRepository(storage);
+      _transfers = TransferRepository(storage),
+      _assets = AssetRepository(storage);
 
   final AccountRepository _accounts;
+  final AssetRepository _assets;
   final CategoryRepository _categories;
   final TransactionRepository _transactions;
   final TaxRepository _taxes;
@@ -53,6 +57,15 @@ class AppTransactionIoStore implements TransactionIoStore {
       for (final t in taxes)
         if (t.transactionId != null) t.transactionId!: t.amountMinor,
     };
+    final assets = await _assets.getAll();
+    final bought = {
+      for (final a in assets)
+        if (a.purchaseTransactionId != null) a.purchaseTransactionId!: a.name,
+    };
+    final given = {
+      for (final a in assets)
+        if (a.givenTransactionId != null) a.givenTransactionId!: a.name,
+    };
     final rows = <TxRow>[
       for (final t in await _transactions.getAll())
         if (inRange(t.occurredAt))
@@ -77,6 +90,14 @@ class AppTransactionIoStore implements TransactionIoStore {
             },
             owedCompleted: t.completedAt,
             taxMinor: linkedTax[t.id] ?? 0,
+            oweWallet: t.exchangeAccountId == null
+                ? ''
+                : accounts[t.exchangeAccountId] ?? '',
+            item:
+                (t.type == TransactionType.oweIn
+                    ? given[t.id]
+                    : bought[t.id]) ??
+                '',
           ),
       for (final t in taxes)
         if (t.transactionId == null && inRange(t.paidAt))
@@ -183,28 +204,78 @@ class AppTransactionIoStore implements TransactionIoStore {
               TxType.owedToMe ||
               TxType.iOwe:
             final completed = r.owedStatus == OwedStatus.completed;
-            await _transactions.saveWithTax(
-              MoneyTransaction(
-                type: switch (r.type) {
-                  TxType.income => TransactionType.income,
-                  TxType.expense => TransactionType.expense,
-                  TxType.owedToMe => TransactionType.oweIn,
-                  _ => TransactionType.oweOut,
-                },
-                amountMinor: r.amountMinor,
-                categoryId: await category(r.categoryPath, r.type),
-                accountId: r.account.isEmpty ? null : await account(r.account),
-                occurredAt: r.date,
-                note: r.note,
-                party: r.type.isOwe ? r.owedPerson : null,
-                dueAt: r.type.isOwe ? r.dueDate : null,
-                oweStatus: r.type.isOwe
-                    ? (completed ? OweStatus.completed : OweStatus.pending)
-                    : null,
-                completedAt: completed ? (r.owedCompleted ?? r.date) : null,
-              ),
-              taxMinor: r.taxMinor,
-            );
+            final itemName = r.item.trim();
+            // An item given away must be an asset: reuse an owned one with
+            // that name, else add it (removed again if the row fails).
+            Asset? createdGift;
+            OweItem? item;
+            if (itemName.isNotEmpty && r.type == TxType.owedToMe) {
+              final owned = (await _assets.getAll())
+                  .where(
+                    (a) =>
+                        !a.isGivenAway &&
+                        a.name.trim().toLowerCase() == itemName.toLowerCase(),
+                  )
+                  .firstOrNull;
+              final gift =
+                  owned ??
+                  (createdGift = await _assets.create(
+                    Asset(
+                      name: itemName,
+                      acquiredOn: r.date,
+                      purchaseAmountMinor: r.amountMinor,
+                      currentValueMinor: r.amountMinor,
+                    ),
+                  ));
+              item = OweItem.given(gift.id!);
+            } else if (itemName.isNotEmpty && r.type == TxType.iOwe) {
+              item = OweItem.received(itemName);
+            }
+            final MoneyTransaction saved;
+            try {
+              saved = await _transactions.saveWithTax(
+                MoneyTransaction(
+                  type: switch (r.type) {
+                    TxType.income => TransactionType.income,
+                    TxType.expense => TransactionType.expense,
+                    TxType.owedToMe => TransactionType.oweIn,
+                    _ => TransactionType.oweOut,
+                  },
+                  amountMinor: r.amountMinor,
+                  categoryId: await category(r.categoryPath, r.type),
+                  accountId: r.account.isEmpty
+                      ? null
+                      : await account(r.account),
+                  occurredAt: r.date,
+                  note: r.note,
+                  party: r.type.isOwe ? r.owedPerson : null,
+                  dueAt: r.type.isOwe ? r.dueDate : null,
+                  oweStatus: r.type.isOwe
+                      ? (completed ? OweStatus.completed : OweStatus.pending)
+                      : null,
+                  completedAt: completed ? (r.owedCompleted ?? r.date) : null,
+                  exchangeAccountId: r.type.isOwe && r.oweWallet.isNotEmpty
+                      ? await account(r.oweWallet)
+                      : null,
+                ),
+                taxMinor: r.taxMinor,
+                item: item,
+              );
+            } catch (_) {
+              if (createdGift != null) await _assets.delete(createdGift.id!);
+              rethrow;
+            }
+            if (itemName.isNotEmpty && r.type == TxType.expense) {
+              await _assets.create(
+                Asset(
+                  name: itemName,
+                  acquiredOn: r.date,
+                  purchaseAmountMinor: r.amountMinor,
+                  currentValueMinor: r.amountMinor,
+                  purchaseTransactionId: saved.id,
+                ),
+              );
+            }
         }
       } catch (e) {
         issues.add(

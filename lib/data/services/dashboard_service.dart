@@ -45,6 +45,8 @@ class DashboardSummary {
   final int oweInMinor;
   final int oweOutMinor;
   final int taxPaidMinor;
+
+  /// Value of assets still owned (given-away ones are left out).
   final int assetValueMinor;
   final List<AccountOverview> accounts;
   int get totalBalanceMinor =>
@@ -86,6 +88,7 @@ class DashboardService {
     );
     final assets = await db.rawQuery('''
       SELECT COALESCE(SUM(current_value_minor), 0) AS total FROM assets
+      WHERE given_transaction_id IS NULL
     ''');
     final accounts = await _loadAccounts();
     return DashboardSummary(

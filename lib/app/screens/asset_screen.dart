@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../data/models/asset.dart';
+import '../../data/models/model_types.dart';
 import '../app_services.dart';
 import '../app_sizes.dart';
 import '../controllers/asset_controller.dart';
+import '../controllers/money_amount.dart';
 import '../widgets/app_widgets.dart';
 
 class AssetScreen extends StatefulWidget {
@@ -28,6 +30,46 @@ class _AssetScreenState extends State<AssetScreen> {
     super.dispose();
   }
 
+  Future<int?> _pickWallet(int? selected) => showPickerSheet<int>(
+    context,
+    title: 'Paid from',
+    selected: selected,
+    emptyMessage: 'Add an account in Settings › Accounts first.',
+    options: [
+      for (final a in controller.accounts)
+        if (!a.isArchived || a.id == selected)
+          PickerOption(
+            value: a.id!,
+            title: a.name,
+            icon: a.type == AccountType.bank
+                ? Icons.account_balance_outlined
+                : Icons.payments_outlined,
+          ),
+    ],
+  );
+
+  Future<int?> _pickCategory(int? selected) => showPickerSheet<int>(
+    context,
+    title: 'Category',
+    selected: selected,
+    emptyMessage: 'No expense categories yet.',
+    options: [
+      for (final c in controller.categories)
+        PickerOption(
+          value: c.id!,
+          title: c.name,
+          subtitle: c.parentId == null
+              ? null
+              : controller.pathFor(c).replaceFirst(RegExp(r' / [^/]+$'), ''),
+          leading: CategoryBadge(
+            name: c.name,
+            iconKey: c.icon,
+            colorHex: c.color,
+          ),
+        ),
+    ],
+  );
+
   Future<void> _edit([Asset? existing]) async {
     controller.clearError();
     var name = existing?.name ?? '';
@@ -39,7 +81,30 @@ class _AssetScreenState extends State<AssetScreen> {
         : amountInputText(existing.currentValueMinor);
     var date = existing?.acquiredOn ?? DateTime.now();
     var notes = existing?.notes ?? '';
-    final symbol = '${currencySymbol(widget.services.currencyCode)} ';
+    final linked = existing == null ? null : controller.purchaseOf(existing);
+    final given = existing == null ? null : controller.givenIn(existing);
+    var source = controller.sourceOf(existing);
+    int? accountId = linked?.accountId ?? controller.defaultAccount;
+    int? categoryId = linked?.categoryId;
+    var party = linked?.party ?? '';
+    final currency = widget.services.currencyCode;
+    final symbol = '${currencySymbol(currency)} ';
+
+    String sourceNote() {
+      final price = MoneyAmount.tryParse(purchase);
+      final amount = price == null ? 'The price paid' : money(price, currency);
+      return switch (source) {
+        AssetSource.owned =>
+          'Nothing changes in your wallets. Use this for things you already '
+              'had or were given.',
+        AssetSource.paid =>
+          '$amount leaves ${controller.accountName(accountId) ?? 'the wallet'} '
+              'as an expense.',
+        AssetSource.owed =>
+          '$amount is added to Money owed. It leaves a wallet when you mark '
+              'it as paid.',
+      };
+    }
 
     await showAppSheet<void>(
       context,
@@ -64,7 +129,10 @@ class _AssetScreenState extends State<AssetScreen> {
                 currentValue: current.trim().isEmpty ? paid : current,
                 acquiredOn: date,
                 notes: notes.trim().isEmpty ? null : notes.trim(),
-                purchaseTransactionId: existing?.purchaseTransactionId,
+                source: source,
+                accountId: accountId,
+                categoryId: categoryId,
+                party: party,
               );
               if (ok && sheetContext.mounted) Navigator.pop(sheetContext);
             },
@@ -73,6 +141,10 @@ class _AssetScreenState extends State<AssetScreen> {
               if (await confirmDelete(
                     context,
                     title: 'Delete ${existing!.name}?',
+                    message: linked == null && given == null
+                        ? 'This can’t be undone.'
+                        : 'Entries linked to it stay in your history. '
+                              'This can’t be undone.',
                   ) &&
                   await controller.remove(existing.id!) &&
                   sheetContext.mounted) {
@@ -99,7 +171,7 @@ class _AssetScreenState extends State<AssetScreen> {
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
-                      onChanged: (v) => purchase = v,
+                      onChanged: (v) => setSheetState(() => purchase = v),
                     ),
                   ),
                   const SizedBox(width: SpaceSize.medium),
@@ -137,10 +209,80 @@ class _AssetScreenState extends State<AssetScreen> {
                   ),
                 ],
               ),
-              const InfoNote(
-                'Assets don’t change your account balances. Record the '
-                'purchase as an expense if the money came from an account.',
+              const SizedBox(height: SpaceSize.large),
+              Text(
+                'How did you get it?',
+                style: Theme.of(context).textTheme.titleSmall,
               ),
+              const SizedBox(height: SpaceSize.small),
+              SegmentedButton<AssetSource>(
+                showSelectedIcon: false,
+                segments: const [
+                  ButtonSegment(
+                    value: AssetSource.owned,
+                    label: Text('Had it'),
+                  ),
+                  ButtonSegment(value: AssetSource.paid, label: Text('Paid')),
+                  ButtonSegment(
+                    value: AssetSource.owed,
+                    label: Text('On credit'),
+                  ),
+                ],
+                selected: {source},
+                // A linked purchase can't change kind; edit its entry instead.
+                onSelectionChanged: linked != null
+                    ? null
+                    : (v) => setSheetState(() {
+                        source = v.first;
+                        categoryId ??= controller.defaultCategory(source);
+                      }),
+              ),
+              if (source != AssetSource.owned) ...[
+                const SizedBox(height: SpaceSize.medium),
+                GroupedCard(
+                  dividerIndent: 56,
+                  children: [
+                    if (source == AssetSource.paid)
+                      FormRow(
+                        icon: Icons.account_balance_wallet_outlined,
+                        label: 'Paid from',
+                        value: controller.accountName(accountId),
+                        onTap: () async {
+                          final picked = await _pickWallet(accountId);
+                          if (picked != null) {
+                            setSheetState(() => accountId = picked);
+                          }
+                        },
+                      )
+                    else
+                      FormTextRow(
+                        icon: Icons.person_outline_rounded,
+                        hint: 'Who do you owe?',
+                        value: party,
+                        onChanged: (v) => party = v,
+                        capitalization: TextCapitalization.words,
+                      ),
+                    FormRow(
+                      icon: Icons.sell_outlined,
+                      label: 'Category',
+                      value: controller.category(categoryId)?.name,
+                      onTap: () async {
+                        final picked = await _pickCategory(categoryId);
+                        if (picked != null) {
+                          setSheetState(() => categoryId = picked);
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ],
+              InfoNote(sourceNote()),
+              if (given != null)
+                InfoNote(
+                  'Given to ${(given.party ?? '').trim().isEmpty ? 'someone' : given.party!.trim()} '
+                  'on ${formatDate(given.occurredAt)}. It’s no longer counted '
+                  'in your assets.',
+                ),
             ],
           ),
         ),
@@ -148,15 +290,31 @@ class _AssetScreenState extends State<AssetScreen> {
     );
   }
 
+  String _subtitle(Asset a, String currency) {
+    final purchase = controller.purchaseOf(a);
+    final given = controller.givenIn(a);
+    final parts = [
+      'Paid ${money(a.purchaseAmountMinor, currency)}',
+      formatDate(a.acquiredOn),
+      if (given != null)
+        'Given to ${(given.party ?? '').trim().isEmpty ? 'someone' : given.party!.trim()}'
+      else if (purchase?.type == TransactionType.expense)
+        'from ${controller.accountName(purchase!.accountId) ?? 'a wallet'}'
+      else if (purchase != null)
+        purchase.oweStatus == OweStatus.pending
+            ? 'still owed${(purchase.party ?? '').trim().isEmpty ? '' : ' to ${purchase.party!.trim()}'}'
+            : 'paid off',
+    ];
+    return parts.join(' · ');
+  }
+
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: controller,
     builder: (context, _) {
       final currency = widget.services.currencyCode;
-      final total = controller.items.fold<int>(
-        0,
-        (s, a) => s + a.currentValueMinor,
-      );
+      final owned = controller.owned;
+      final givenAway = controller.givenAway;
       return Scaffold(
         appBar: AppBar(title: const Text('Assets')),
         floatingActionButton: FloatingActionButton.extended(
@@ -188,24 +346,42 @@ class _AssetScreenState extends State<AssetScreen> {
                   AppTile(
                     title: 'Total value',
                     trailing: AmountText(
-                      total,
+                      controller.ownedValueMinor,
                       currency: currency,
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                   ),
                 ],
               ),
-              const SectionHeader('Your assets'),
-              GroupedCard(
-                children: [
-                  for (final a in controller.items)
-                    _AssetTile(
-                      asset: a,
-                      currency: currency,
-                      onTap: () => _edit(a),
-                    ),
-                ],
-              ),
+              if (owned.isNotEmpty) ...[
+                const SectionHeader('Your assets'),
+                GroupedCard(
+                  children: [
+                    for (final a in owned)
+                      _AssetTile(
+                        asset: a,
+                        currency: currency,
+                        subtitle: _subtitle(a, currency),
+                        onTap: () => _edit(a),
+                      ),
+                  ],
+                ),
+              ],
+              if (givenAway.isNotEmpty) ...[
+                const SectionHeader('Given away'),
+                GroupedCard(
+                  children: [
+                    for (final a in givenAway)
+                      _AssetTile(
+                        asset: a,
+                        currency: currency,
+                        subtitle: _subtitle(a, currency),
+                        muted: true,
+                        onTap: () => _edit(a),
+                      ),
+                  ],
+                ),
+              ],
             ],
           ],
         ),
@@ -218,28 +394,39 @@ class _AssetTile extends StatelessWidget {
   const _AssetTile({
     required this.asset,
     required this.currency,
+    required this.subtitle,
     required this.onTap,
+    this.muted = false,
   });
   final Asset asset;
   final String currency;
+  final String subtitle;
   final VoidCallback onTap;
+
+  /// Given away: shown for reference, not counted.
+  final bool muted;
 
   @override
   Widget build(BuildContext context) {
     final change = asset.currentValueMinor - asset.purchaseAmountMinor;
     return AppTile(
-      leading: const IconBadge(Icons.inventory_2_outlined),
+      leading: IconBadge(
+        muted ? Icons.redeem_outlined : Icons.inventory_2_outlined,
+      ),
       title: asset.name,
-      subtitle:
-          'Paid ${money(asset.purchaseAmountMinor, currency)} · ${formatDate(asset.acquiredOn)}',
+      subtitle: subtitle,
       onTap: onTap,
       showChevron: false,
       trailing: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         mainAxisSize: MainAxisSize.min,
         children: [
-          AmountText(asset.currentValueMinor, currency: currency),
-          if (change != 0)
+          AmountText(
+            asset.currentValueMinor,
+            currency: currency,
+            tone: muted ? AmountTone.muted : AmountTone.neutral,
+          ),
+          if (change != 0 && !muted)
             AmountText(
               change,
               currency: currency,

@@ -13,6 +13,7 @@ class Asset {
     required this.purchaseAmountMinor,
     required this.currentValueMinor,
     this.purchaseTransactionId,
+    this.givenTransactionId,
     this.notes,
   });
 
@@ -21,7 +22,15 @@ class Asset {
   final DateTime acquiredOn;
   final int purchaseAmountMinor;
   final int currentValueMinor;
+
+  /// How it was acquired: an expense (paid from a wallet) or an "I owe" entry
+  /// (still owed to the seller). Null = already owned, no money moved.
   final int? purchaseTransactionId;
+
+  /// The "owed to me" entry this was given away in. Given-away assets are no
+  /// longer counted in asset value.
+  final int? givenTransactionId;
+  bool get isGivenAway => givenTransactionId != null;
   final String? notes;
 
   factory Asset.fromJson(Map<String, dynamic> json) => _$AssetFromJson(json);
@@ -34,6 +43,7 @@ class Asset {
     int? purchaseAmountMinor,
     int? currentValueMinor,
     Object? purchaseTransactionId = omitted,
+    Object? givenTransactionId = omitted,
     Object? notes = omitted,
   }) => Asset(
     id: identical(id, omitted) ? this.id : id as int?,
@@ -44,6 +54,9 @@ class Asset {
     purchaseTransactionId: identical(purchaseTransactionId, omitted)
         ? this.purchaseTransactionId
         : purchaseTransactionId as int?,
+    givenTransactionId: identical(givenTransactionId, omitted)
+        ? this.givenTransactionId
+        : givenTransactionId as int?,
     notes: identical(notes, omitted) ? this.notes : notes as String?,
   );
 }

@@ -18,6 +18,7 @@ class MoneyTransaction {
     this.dueAt,
     this.oweStatus,
     this.completedAt,
+    this.exchangeAccountId,
   });
 
   final int? id;
@@ -31,6 +32,11 @@ class MoneyTransaction {
   final DateTime? dueAt;
   final OweStatus? oweStatus;
   final DateTime? completedAt;
+
+  /// Owes only: the wallet money moved through when the owe started — lent
+  /// from it (owed to me) or borrowed into it (I owe). Null when nothing was
+  /// recorded or when an item was exchanged instead (see assets).
+  final int? exchangeAccountId;
 
   factory MoneyTransaction.fromJson(Map<String, dynamic> json) =>
       _$MoneyTransactionFromJson(json);
@@ -48,6 +54,7 @@ class MoneyTransaction {
     Object? dueAt = omitted,
     Object? oweStatus = omitted,
     Object? completedAt = omitted,
+    Object? exchangeAccountId = omitted,
   }) => MoneyTransaction(
     id: identical(id, omitted) ? this.id : id as int?,
     type: type ?? this.type,
@@ -66,5 +73,8 @@ class MoneyTransaction {
     completedAt: identical(completedAt, omitted)
         ? this.completedAt
         : completedAt as DateTime?,
+    exchangeAccountId: identical(exchangeAccountId, omitted)
+        ? this.exchangeAccountId
+        : exchangeAccountId as int?,
   );
 }

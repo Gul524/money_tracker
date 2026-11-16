@@ -21,4 +21,13 @@ class MoneyAmount {
     }
     return negative ? -amount : amount;
   }
+
+  /// Positive amount, or null when [input] isn't one.
+  static int? tryParse(String input) {
+    try {
+      return parse(input);
+    } on ArgumentError {
+      return null;
+    }
+  }
 }

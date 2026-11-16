@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:money_tracker/app/app_services.dart';
 import 'package:money_tracker/app/app_theme.dart';
 import 'package:money_tracker/app/screens/app_shell.dart';
+import 'package:money_tracker/app/screens/asset_screen.dart';
 import 'package:money_tracker/app/screens/reports_screen.dart';
 import 'package:money_tracker/app/screens/settings_screen.dart';
 import 'package:money_tracker/app/screens/account_detail_screen.dart';
@@ -388,5 +389,88 @@ void main() {
     final food = (await tester.runAsync(services.categories.getAll))!
         .firstWhere((c) => c.name == 'Food');
     expect((food.icon, food.color), ('local_pizza', '#12AB9C'));
+  });
+
+  testWidgets('owe form records money lent and an asset paid from a wallet', (
+    tester,
+  ) async {
+    _phoneSize(tester);
+    final services = _services();
+    addTearDown(services.close);
+    await tester.runAsync(services.initialize);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: AppShell(services: services),
+      ),
+    );
+    await _settle(tester);
+
+    await tester.tap(find.byTooltip('Add'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Someone owes me'));
+    await _settle(tester);
+    expect(find.text('What did you give them? (optional)'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).first, '500');
+    await tester.tap(find.text('Category'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Salary'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Money'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Lent from'));
+    await tester.tap(find.text('Lent from'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cash').last);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Rs 500.00 leaves Cash now'), findsOneWidget);
+    await tester.tap(find.text('Save'));
+    await _settle(tester);
+    await _settle(tester);
+    expect(find.text('Saved'), findsOneWidget);
+    expect(
+      await tester.runAsync(() => services.accounts.balanceMinor(1)),
+      -50000,
+    );
+
+    // Assets: "Paid" takes the price from a wallet as an expense.
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: AssetScreen(services: services),
+      ),
+    );
+    await _settle(tester);
+    await tester.tap(find.byType(FloatingActionButton));
+    await _settle(tester);
+    await tester.enterText(
+      find.ancestor(of: find.text('Name'), matching: find.byType(TextField)),
+      'Watch',
+    );
+    await tester.enterText(
+      find.ancestor(
+        of: find.text('Price paid'),
+        matching: find.byType(TextField),
+      ),
+      '300',
+    );
+    await tester.ensureVisible(find.text('Paid'));
+    await tester.tap(find.text('Paid'));
+    await tester.pumpAndSettle();
+    // Cash is the only wallet, so it's preselected.
+    expect(find.textContaining('Rs 300.00 leaves Cash'), findsOneWidget);
+    await tester.ensureVisible(find.text('Category'));
+    await tester.tap(find.text('Category'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Shopping'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save'));
+    await _settle(tester);
+    expect(find.text('Your assets'), findsOneWidget);
+    expect(find.textContaining('from Cash'), findsOneWidget);
+    expect(
+      await tester.runAsync(() => services.accounts.balanceMinor(1)),
+      -80000,
+    );
   });
 }

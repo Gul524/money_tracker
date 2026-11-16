@@ -13,6 +13,7 @@ Asset _$AssetFromJson(Map<String, dynamic> json) => Asset(
   purchaseAmountMinor: (json['purchaseAmountMinor'] as num).toInt(),
   currentValueMinor: (json['currentValueMinor'] as num).toInt(),
   purchaseTransactionId: (json['purchaseTransactionId'] as num?)?.toInt(),
+  givenTransactionId: (json['givenTransactionId'] as num?)?.toInt(),
   notes: json['notes'] as String?,
 );
 
@@ -23,5 +24,6 @@ Map<String, dynamic> _$AssetToJson(Asset instance) => <String, dynamic>{
   'purchaseAmountMinor': instance.purchaseAmountMinor,
   'currentValueMinor': instance.currentValueMinor,
   'purchaseTransactionId': instance.purchaseTransactionId,
+  'givenTransactionId': instance.givenTransactionId,
   'notes': instance.notes,
 };

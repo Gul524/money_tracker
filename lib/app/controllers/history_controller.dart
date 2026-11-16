@@ -150,6 +150,7 @@ class HistoryController extends BaseController {
       item.note,
       item.party,
       item.accountName ?? '',
+      item.linkLabel ?? '',
     ];
     if (text.any((field) => field.toLowerCase().contains(q))) return true;
     // Amount search: "1250", "1,250" or "1250.5" match Rs 1,250.50.

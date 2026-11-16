@@ -14,10 +14,10 @@ class AccountFlow {
   });
   final Account account;
 
-  /// Income, received owes and transfers in.
+  /// Income, received owes, money borrowed and transfers in.
   final int inMinor;
 
-  /// Expenses, repaid owes, tax and transfers out.
+  /// Expenses, repaid owes, money lent, tax and transfers out.
   final int outMinor;
 
   /// Part of [outMinor] that was tax.
@@ -51,6 +51,8 @@ class PeriodReport {
     required this.taxMinor,
     required this.oweReceivedMinor,
     required this.oweRepaidMinor,
+    this.lentMinor = 0,
+    this.borrowedMinor = 0,
     required this.entryCount,
     required this.categories,
     required this.accounts,
@@ -69,6 +71,11 @@ class PeriodReport {
   /// Owes settled during the period (money received back / paid back).
   final int oweReceivedMinor;
   final int oweRepaidMinor;
+
+  /// Money that left a wallet as a loan (owed to me) / came into a wallet as
+  /// a loan (I owe) during the period. Not income or spending.
+  final int lentMinor;
+  final int borrowedMinor;
 
   /// Income, expense and tax entries in the period.
   final int entryCount;
@@ -115,6 +122,13 @@ class ReportService {
       FROM transactions
       WHERE owe_status = 'completed' AND completed_at >= ? AND completed_at < ?
     ''', range);
+    final loans = await db.rawQuery('''
+      SELECT
+        COALESCE(SUM(CASE WHEN type = 'oweIn' THEN amount_minor END), 0) AS lent,
+        COALESCE(SUM(CASE WHEN type = 'oweOut' THEN amount_minor END), 0) AS borrowed
+      FROM transactions
+      WHERE exchange_account_id IS NOT NULL AND occurred_at >= ? AND occurred_at < ?
+    ''', range);
 
     return PeriodReport(
       start: start,
@@ -124,6 +138,8 @@ class ReportService {
       taxMinor: tax.first['total'] as int,
       oweReceivedMinor: owes.first['received'] as int,
       oweRepaidMinor: owes.first['repaid'] as int,
+      lentMinor: loans.first['lent'] as int,
+      borrowedMinor: loans.first['borrowed'] as int,
       entryCount:
           (totals.first['entries'] as int) + (tax.first['standalone'] as int),
       categories: await _dashboard.categoryTotalsBetween(start, end),
@@ -152,6 +168,16 @@ class ReportService {
     ''', range)) {
       final incoming = row['type'] == 'income' || row['type'] == 'oweIn';
       add(incoming ? inflow : outflow, row['id'], row['total']);
+    }
+    // Money lent out of / borrowed into a wallet when an owe started.
+    for (final row in await db.rawQuery('''
+      SELECT exchange_account_id AS id, type, SUM(amount_minor) AS total
+      FROM transactions
+      WHERE exchange_account_id IS NOT NULL
+        AND occurred_at >= ? AND occurred_at < ?
+      GROUP BY exchange_account_id, type
+    ''', range)) {
+      add(row['type'] == 'oweOut' ? inflow : outflow, row['id'], row['total']);
     }
     for (final row in await db.rawQuery('''
       SELECT account_id AS id, SUM(amount_minor) AS total FROM tax_payments

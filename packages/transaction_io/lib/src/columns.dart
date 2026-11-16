@@ -19,7 +19,14 @@ enum TxColumn {
     'completedon',
   ]),
   owedStatus('Owed status', ['owedstatus', 'status']),
-  taxPaid('Tax paid', ['taxpaid', 'tax']);
+  taxPaid('Tax paid', ['taxpaid', 'tax']),
+  oweWallet('Owe wallet', [
+    'owewallet',
+    'lentfrom',
+    'borrowedinto',
+    'lentborrowedwallet',
+  ]),
+  item('Item', ['item', 'asset', 'thing']);
 
   const TxColumn(this.header, this.aliases);
   final String header;

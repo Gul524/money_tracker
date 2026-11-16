@@ -3,6 +3,7 @@ import '../models/money_transaction.dart';
 import '../models/model_types.dart';
 import '../models/tax_payment.dart';
 import '../repo/account_repository.dart';
+import '../repo/asset_repository.dart';
 import '../repo/category_repository.dart';
 import '../repo/tax_repository.dart';
 import '../repo/transaction_repository.dart';
@@ -29,6 +30,7 @@ class ActivityItem {
     this.categoryId,
     this.categoryIcon,
     this.categoryColor,
+    this.linkLabel,
   });
 
   final String title;
@@ -59,6 +61,14 @@ class ActivityItem {
   final String? categoryIcon;
   final String? categoryColor;
 
+  /// The other side of the entry, e.g. `Lent from Cash`, `Borrowed into
+  /// Bank`, `Gave Gold ring`, `Got Laptop`, `Bought Desk`. Null when none.
+  final String? linkLabel;
+
+  bool get isOwe =>
+      transaction?.type == TransactionType.oweIn ||
+      transaction?.type == TransactionType.oweOut;
+
   String get note => switch (kind) {
     ActivityKind.transaction => transaction?.note ?? '',
     ActivityKind.tax => tax?.note ?? '',
@@ -67,10 +77,18 @@ class ActivityItem {
 
   String get party => transaction?.party ?? '';
 
-  /// What this entry did to the user's money overall: transfers and pending
-  /// owes change nothing; linked tax is included.
+  /// What this entry did to the user's wallets overall: transfers change
+  /// nothing; linked tax is included. An owe counts money lent/borrowed when
+  /// it started and money received/repaid once settled (so a settled loan of
+  /// money nets to 0).
   int get netEffectMinor {
-    if (kind == ActivityKind.transfer || isPending) return 0;
+    if (kind == ActivityKind.transfer) return 0;
+    if (isOwe) {
+      final t = transaction!;
+      return (isPending ? 0 : amountMinor) -
+          (t.exchangeAccountId == null ? 0 : amountMinor);
+    }
+    if (isPending) return 0;
     return amountMinor - taxMinor;
   }
 
@@ -82,6 +100,11 @@ class ActivityItem {
           ? transfer!.amountMinor
           : -transfer!.amountMinor;
     }
+    if (isOwe) {
+      final t = transaction!;
+      return (!isPending && t.accountId == accountId ? amountMinor : 0) -
+          (t.exchangeAccountId == accountId ? amountMinor : 0);
+    }
     return netEffectMinor;
   }
 }
@@ -92,13 +115,15 @@ class ActivityService {
       _taxes = TaxRepository(storage),
       _transfers = TransferRepository(storage),
       _categories = CategoryRepository(storage),
-      _accounts = AccountRepository(storage);
+      _accounts = AccountRepository(storage),
+      _assets = AssetRepository(storage);
 
   final TransactionRepository _transactions;
   final TaxRepository _taxes;
   final TransferRepository _transfers;
   final CategoryRepository _categories;
   final AccountRepository _accounts;
+  final AssetRepository _assets;
 
   Future<List<ActivityItem>> history({int? limit}) async {
     final transactions = await _transactions.history(limit: limit);
@@ -111,6 +136,31 @@ class ActivityService {
         if (t.transactionId != null) t.transactionId!: t.amountMinor,
     };
     final standaloneTax = taxes.where((t) => t.transactionId == null);
+    final bought = <int, String>{};
+    final given = <int, String>{};
+    for (final a in await _assets.getAll()) {
+      if (a.purchaseTransactionId != null) {
+        bought[a.purchaseTransactionId!] = a.name;
+      }
+      if (a.givenTransactionId != null) given[a.givenTransactionId!] = a.name;
+    }
+    String? link(MoneyTransaction t) => switch (t.type) {
+      TransactionType.oweIn =>
+        t.exchangeAccountId != null
+            ? 'Lent from ${accounts[t.exchangeAccountId] ?? 'account'}'
+            : given[t.id] == null
+            ? null
+            : 'Gave ${given[t.id]}',
+      TransactionType.oweOut =>
+        t.exchangeAccountId != null
+            ? 'Borrowed into ${accounts[t.exchangeAccountId] ?? 'account'}'
+            : bought[t.id] == null
+            ? null
+            : 'Got ${bought[t.id]}',
+      TransactionType.expense =>
+        bought[t.id] == null ? null : 'Bought ${bought[t.id]}',
+      TransactionType.income => null,
+    };
 
     final items = <ActivityItem>[
       for (final t in transactions)
@@ -136,11 +186,12 @@ class ActivityService {
           isPending: t.oweStatus == OweStatus.pending,
           transaction: t,
           taxMinor: linkedTax[t.id] ?? 0,
-          accountIds: {?t.accountId},
+          accountIds: {?t.accountId, ?t.exchangeAccountId},
           accountName: t.accountId == null ? null : accounts[t.accountId],
           categoryId: t.categoryId,
           categoryIcon: categories[t.categoryId]?.icon,
           categoryColor: categories[t.categoryId]?.color,
+          linkLabel: link(t),
         ),
       for (final t in limit == null ? standaloneTax : standaloneTax.take(limit))
         ActivityItem(

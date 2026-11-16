@@ -49,6 +49,16 @@ class AccountRepository extends CrudRepository<Account> {
     ''',
       [accountId],
     );
+    // Money lent from (owed to me) or borrowed into (I owe) this account
+    // when an owe started, whatever its status.
+    final exchangeRows = await db.rawQuery(
+      '''
+      SELECT COALESCE(SUM(CASE WHEN type = 'oweOut' THEN amount_minor
+        ELSE -amount_minor END), 0) AS amount
+      FROM transactions WHERE exchange_account_id = ?
+    ''',
+      [accountId],
+    );
     final taxRows = await db.rawQuery(
       '''
       SELECT COALESCE(SUM(amount_minor), 0) AS amount
@@ -65,7 +75,8 @@ class AccountRepository extends CrudRepository<Account> {
       [accountId, accountId, accountId],
     );
     return account.openingBalanceMinor +
-        (transactionRows.first['amount'] as int) -
+        (transactionRows.first['amount'] as int) +
+        (exchangeRows.first['amount'] as int) -
         (taxRows.first['amount'] as int) +
         (transferRows.first['amount'] as int);
   }

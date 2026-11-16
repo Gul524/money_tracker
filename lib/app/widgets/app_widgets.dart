@@ -623,7 +623,11 @@ class ActivityTile extends StatelessWidget {
     // Income and expense rows wear their category's own icon and color.
     final isCategoryEntry =
         t?.type == TransactionType.income || t?.type == TransactionType.expense;
-    final amount = isTransfer && accountId != null
+    // Inside one account, transfers and money lent/borrowed show what they
+    // did to that account.
+    final owesHere =
+        item.isOwe && accountId != null && t!.exchangeAccountId == accountId;
+    final amount = (isTransfer || owesHere) && accountId != null
         ? item.effectOn(accountId!)
         : item.amountMinor;
     final tone = item.isPending || isTransfer
@@ -639,6 +643,7 @@ class ActivityTile extends StatelessWidget {
     final detail = [
       if (isTransfer) item.accountName ?? item.subtitle else item.subtitle,
       if (isOwe && party.isNotEmpty) item.title,
+      ?item.linkLabel,
       if (!isTransfer && accountId == null && item.accountName != null)
         item.accountName!,
       if (item.taxMinor > 0) 'Tax ${money(item.taxMinor, currency)}',

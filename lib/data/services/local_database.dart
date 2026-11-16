@@ -17,7 +17,7 @@ class LocalDatabase {
     _database = await _factory.openDatabase(
       databasePath,
       options: OpenDatabaseOptions(
-        version: 5,
+        version: 6,
         onConfigure: (db) async => db.execute('PRAGMA foreign_keys = ON'),
         onCreate: _createSchema,
         onUpgrade: _upgradeSchema,
@@ -69,6 +69,8 @@ class LocalDatabase {
         due_at TEXT,
         owe_status TEXT CHECK(owe_status IN ('pending', 'completed')),
         completed_at TEXT,
+        exchange_account_id INTEGER REFERENCES accounts(id) ON DELETE RESTRICT
+          CHECK($_exchangeCheck),
         CHECK((type IN ('income', 'expense') AND account_id IS NOT NULL
           AND owe_status IS NULL AND due_at IS NULL AND completed_at IS NULL)
           OR (type IN ('oweIn', 'oweOut') AND owe_status IS NOT NULL
@@ -97,6 +99,7 @@ class LocalDatabase {
         current_value_minor INTEGER NOT NULL CHECK(current_value_minor >= 0),
         purchase_transaction_id INTEGER UNIQUE REFERENCES transactions(id) ON DELETE RESTRICT,
         notes TEXT,
+        given_transaction_id INTEGER REFERENCES transactions(id) ON DELETE SET NULL,
         CHECK(length(trim(name)) > 0)
       )
     ''');
@@ -114,6 +117,7 @@ class LocalDatabase {
       'CREATE INDEX tax_payments_date_idx ON tax_payments(paid_at)',
     );
     await _createTaxLinkIndex(db);
+    await _createOweLinkIndexes(db);
     await _createTransfers(db);
     await _createSettings(db);
     await _seedDefaults(db);
@@ -151,6 +155,46 @@ class LocalDatabase {
         );
       }
     }
+    if (oldVersion < 6) {
+      // Two-way owes: the wallet money moved through when an owe started,
+      // and the asset given away in an "owed to me" entry.
+      final tx = await _columnNames(db, 'transactions');
+      final assets = await _columnNames(db, 'assets');
+      if (tx.isNotEmpty && !tx.contains('exchange_account_id')) {
+        await db.execute(
+          'ALTER TABLE transactions ADD COLUMN exchange_account_id INTEGER '
+          'REFERENCES accounts(id) ON DELETE RESTRICT CHECK($_exchangeCheck)',
+        );
+      }
+      if (assets.isNotEmpty && !assets.contains('given_transaction_id')) {
+        await db.execute(
+          'ALTER TABLE assets ADD COLUMN given_transaction_id INTEGER '
+          'REFERENCES transactions(id) ON DELETE SET NULL',
+        );
+      }
+      if (tx.isNotEmpty && assets.isNotEmpty) await _createOweLinkIndexes(db);
+    }
+  }
+
+  Future<Set<Object?>> _columnNames(Database db, String table) async =>
+      (await db.rawQuery('PRAGMA table_info($table)'))
+          .map((c) => c['name'])
+          .toSet();
+
+  /// Only owes can record the wallet money moved through.
+  static const _exchangeCheck =
+      "exchange_account_id IS NULL OR type IN ('oweIn', 'oweOut')";
+
+  Future<void> _createOweLinkIndexes(Database db) async {
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS transactions_exchange_idx '
+      'ON transactions(exchange_account_id)',
+    );
+    // An asset can be given away in only one entry.
+    await db.execute(
+      'CREATE UNIQUE INDEX IF NOT EXISTS assets_given_idx '
+      'ON assets(given_transaction_id) WHERE given_transaction_id IS NOT NULL',
+    );
   }
 
   /// A stored color is NULL or `#RRGGBB` in upper-case hex.

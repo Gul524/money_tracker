@@ -31,7 +31,7 @@ Uint8List encodeXlsx(List<TxRow> rows) {
     sheet.appendRow([for (final c in TxColumn.values) _cell(c, r, sr)]);
   }
 
-  const widths = [6.0, 12, 26, 14, 20, 22, 30, 18, 20, 20, 13, 12];
+  const widths = [6.0, 12, 26, 14, 20, 22, 30, 18, 20, 20, 13, 12, 18, 22];
   for (var i = 0; i < widths.length; i++) {
     sheet.setColumnWidth(i, widths[i].toDouble());
   }
@@ -64,6 +64,8 @@ CellValue? _cell(TxColumn column, TxRow r, int sr) => switch (column) {
     r.owedStatus == null ? null : TextCellValue(r.owedStatus!.label),
   TxColumn.taxPaid =>
     r.taxMinor == 0 ? null : DoubleCellValue(r.taxMinor / 100),
+  TxColumn.oweWallet => _text(r.oweWallet),
+  TxColumn.item => _text(r.item),
 };
 
 CellValue? _text(String s) => s.isEmpty ? null : TextCellValue(s);
@@ -87,6 +89,8 @@ const _readMe = [
   'Account: wallet name. Missing wallets are created. For a Transfer write From → To (or From -> To).',
   'Owed person, Due date, Owed completed (date and time) and Owed status (Pending or Completed) are for Owed to me / I owe.',
   'Tax paid: optional tax paid with an Income or Expense.',
+  'Owe wallet (optional, owes only): the wallet money was lent from (Owed to me) or borrowed into (I owe) when it started.',
+  'Item (optional): a thing bought with an Expense, received in an I owe, or given in an Owed to me. Kept with your assets. Use either Owe wallet or Item.',
   'Rows that match an existing entry by type, account, amount and date are skipped as duplicates.',
 ];
 
@@ -180,6 +184,13 @@ TxRow _parseRow(CellValue? Function(TxColumn) at, int rowNumber) {
   final completed = _parseDate(at(TxColumn.owedCompleted));
   final due = _parseDate(at(TxColumn.dueDate));
   final statusText = _asText(at(TxColumn.owedStatus)).trim().toLowerCase();
+  final oweWallet = type.isOwe ? _asText(at(TxColumn.oweWallet)).trim() : '';
+  final item = type.isOwe || type == TxType.expense
+      ? _asText(at(TxColumn.item)).trim()
+      : '';
+  if (oweWallet.isNotEmpty && item.isNotEmpty) {
+    throw const FormatException('Use either Owe wallet or Item, not both');
+  }
 
   if (type.needsCategory && category.isEmpty) {
     throw FormatException('Category is required for ${type.label}');
@@ -209,6 +220,8 @@ TxRow _parseRow(CellValue? Function(TxColumn) at, int rowNumber) {
     owedCompleted: status == OwedStatus.completed ? (completed ?? date) : null,
     owedStatus: status,
     taxMinor: type == TxType.income || type == TxType.expense ? tax.abs() : 0,
+    oweWallet: oweWallet,
+    item: item,
     sourceRow: rowNumber,
   );
   if (type == TxType.transfer) {

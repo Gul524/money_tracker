@@ -131,11 +131,14 @@ class _OweScreenState extends State<OweScreen> {
         background: colors.warningContainer,
       ),
       title: _who(t),
-      subtitle: due == null
-          ? 'No due date'
-          : overdue
-          ? 'Overdue since ${formatDate(due).replaceFirst(' ${today.year}', '')}'
-          : 'Due ${relativeDay(due) == 'Today' ? 'today' : formatDate(due)}',
+      subtitle: [
+        due == null
+            ? 'No due date'
+            : overdue
+            ? 'Overdue since ${formatDate(due).replaceFirst(' ${today.year}', '')}'
+            : 'Due ${relativeDay(due) == 'Today' ? 'today' : formatDate(due)}',
+        ?controller.links[t.id],
+      ].join(' · '),
       subtitleColor: overdue ? colors.expense : null,
       trailing: AmountText(
         t.amountMinor,
@@ -202,7 +205,9 @@ class _OweScreenState extends State<OweScreen> {
               const EmptyState(
                 icon: Icons.handshake_outlined,
                 title: 'Nothing owed',
-                message: 'When you lend or borrow money, add it here so you never forget who owes what.',
+                message:
+                    'When you lend or borrow money or things, add it here so '
+                    'you never forget who owes what.',
               )
             else ...[
               const InfoNote('Tap an entry when it’s been paid back.'),

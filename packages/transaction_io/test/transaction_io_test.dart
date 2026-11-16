@@ -46,6 +46,7 @@ final _sample = [
     date: DateTime(2026, 11, 3, 18, 5),
     category: 'Food / Groceries',
     account: 'Cash',
+    item: 'Blender',
   ),
   TxRow(
     type: TxType.owedToMe,
@@ -53,6 +54,7 @@ final _sample = [
     date: DateTime(2026, 11, 4),
     category: 'Salary',
     owedPerson: 'Ali',
+    oweWallet: 'Cash',
     dueDate: DateTime(2026, 12, 1, 17, 30),
     owedStatus: OwedStatus.pending,
   ),
@@ -115,6 +117,7 @@ void main() {
         (b.owedPerson, b.owedStatus, b.owedCompleted, b.taxMinor, b.dueDate),
         (a.owedPerson, a.owedStatus, a.owedCompleted, a.taxMinor, a.dueDate),
       );
+      expect((b.oweWallet, b.item), (a.oweWallet, a.item));
       expect(b.sourceRow, i + 2);
     }
 
@@ -126,6 +129,54 @@ void main() {
     final fresh = await importTransactions(empty, exported.bytes);
     expect((fresh.rowsRead, fresh.imported, fresh.duplicates), (6, 6, 0));
     expect(empty.rows, hasLength(6));
+  });
+
+  test('Owe wallet and Item are read only where they apply', () {
+    final parsed = decodeXlsx(
+      _sheet([
+        [
+          TextCellValue('Type'),
+          TextCellValue('Amount'),
+          TextCellValue('Date'),
+          TextCellValue('Category'),
+          TextCellValue('Account'),
+          TextCellValue('Lent from'),
+          TextCellValue('Asset'),
+        ],
+        [
+          TextCellValue('Owed to me'),
+          IntCellValue(10),
+          TextCellValue('2026-11-15'),
+          TextCellValue('Gifts'),
+          null,
+          TextCellValue('Cash'),
+          null,
+        ],
+        [
+          TextCellValue('Income'),
+          IntCellValue(10),
+          TextCellValue('2026-11-15'),
+          TextCellValue('Salary'),
+          TextCellValue('Cash'),
+          TextCellValue('Bank'),
+          TextCellValue('Ring'),
+        ],
+        [
+          TextCellValue('I owe'),
+          IntCellValue(10),
+          TextCellValue('2026-11-15'),
+          TextCellValue('Food'),
+          null,
+          TextCellValue('Cash'),
+          TextCellValue('Laptop'),
+        ],
+      ]),
+    );
+    expect(parsed.rows, hasLength(2));
+    expect((parsed.rows[0].oweWallet, parsed.rows[0].item), ('Cash', ''));
+    // Income can't carry either.
+    expect((parsed.rows[1].oweWallet, parsed.rows[1].item), ('', ''));
+    expect(parsed.issues.single.message, contains('either Owe wallet or Item'));
   });
 
   test('export filters by period', () async {

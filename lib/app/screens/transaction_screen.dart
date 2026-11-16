@@ -82,12 +82,21 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
   Future<void> _delete() async {
     final linkedTax = controller.canHaveTax && controller.taxMinor > 0;
+    final hasItem = controller.exchange == OweExchange.item;
+    final item = controller.kind == EntryKind.oweIn
+        ? controller.givenAsset?.name
+        : controller.receivedItem.trim();
+    final itemNote = !hasItem || (item ?? '').isEmpty
+        ? ''
+        : controller.kind == EntryKind.oweIn
+        ? '$item comes back to your assets. '
+        : '$item stays in your assets. ';
     if (!await confirmDelete(
       context,
       title: 'Delete this entry?',
       message: linkedTax
           ? 'The tax recorded with it is deleted too. This can’t be undone.'
-          : 'This can’t be undone.',
+          : '${itemNote}This can’t be undone.',
     )) {
       return;
     }
@@ -146,11 +155,15 @@ class _TransactionScreenState extends State<TransactionScreen> {
     if (picked != null) controller.setCategory(picked);
   }
 
-  Future<void> _pickAccount() async {
+  Future<void> _pickAccount({bool exchange = false}) async {
     final picked = await showPickerSheet<int>(
       context,
-      title: 'Account',
-      selected: controller.accountId,
+      title: exchange
+          ? (controller.kind == EntryKind.oweIn
+                ? 'Money left which wallet?'
+                : 'Money went into which wallet?')
+          : 'Account',
+      selected: exchange ? controller.exchangeAccountId : controller.accountId,
       emptyMessage: 'Add an account in Settings › Accounts first.',
       options: [
         for (final a in controller.accounts)
@@ -165,7 +178,122 @@ class _TransactionScreenState extends State<TransactionScreen> {
           ),
       ],
     );
-    if (picked != null) controller.setAccount(picked);
+    if (picked == null) return;
+    if (exchange) {
+      controller.setExchangeAccount(picked);
+    } else {
+      controller.setAccount(picked);
+    }
+  }
+
+  Future<void> _pickGivenAsset() async {
+    final currency = widget.services.currencyCode;
+    final picked = await showPickerSheet<int>(
+      context,
+      title: 'Which item did you give?',
+      selected: controller.givenAssetId,
+      emptyMessage:
+          'You have no assets yet. Add the item in Settings › Assets first.',
+      options: [
+        for (final a in controller.assets)
+          PickerOption(
+            value: a.id!,
+            title: a.name,
+            subtitle: 'Worth ${money(a.currentValueMinor, currency)}',
+            icon: Icons.inventory_2_outlined,
+          ),
+      ],
+    );
+    if (picked != null) controller.setGivenAsset(picked);
+  }
+
+  /// Plain-language effect of an owe, by what was exchanged.
+  String _oweNote(String currency) {
+    final amount = money(controller.amountMinor ?? 0, currency);
+    final incoming = controller.kind == EntryKind.oweIn;
+    switch (controller.exchange) {
+      case OweExchange.money:
+        final wallet = controller.exchangeAccount?.name ?? 'the wallet';
+        return incoming
+            ? '$amount leaves $wallet now and comes back when you mark it as received.'
+            : '$amount is added to $wallet now and leaves when you mark it as paid.';
+      case OweExchange.item:
+        if (incoming) {
+          final item = controller.givenAsset?.name ?? 'The item';
+          return '$item leaves your assets now. You get $amount when it’s '
+              'paid back.';
+        }
+        final item = controller.receivedItem.trim().isEmpty
+            ? 'The item'
+            : controller.receivedItem.trim();
+        return '$item is added to your assets worth $amount. The money '
+            'leaves when you mark it as paid.';
+      case OweExchange.none:
+        return 'Owed money doesn’t change your balance until you mark it as '
+            'paid from the Money owed screen.';
+    }
+  }
+
+  List<Widget> _exchangeSection(String currency) {
+    final incoming = controller.kind == EntryKind.oweIn;
+    return [
+      SectionHeader(
+        incoming
+            ? 'What did you give them? (optional)'
+            : 'What did you get from them? (optional)',
+        padding: const EdgeInsets.fromLTRB(
+          SpaceSize.extraSmall,
+          SpaceSize.small,
+          0,
+          SpaceSize.small,
+        ),
+      ),
+      SegmentedButton<OweExchange>(
+        showSelectedIcon: false,
+        segments: const [
+          ButtonSegment(value: OweExchange.none, label: Text('None')),
+          ButtonSegment(value: OweExchange.money, label: Text('Money')),
+          ButtonSegment(value: OweExchange.item, label: Text('Item')),
+        ],
+        selected: {controller.exchange},
+        onSelectionChanged: (v) => controller.setExchange(v.first),
+      ),
+      if (controller.exchange != OweExchange.none) ...[
+        const SizedBox(height: SpaceSize.medium),
+        GroupedCard(
+          dividerIndent: 56,
+          children: [
+            if (controller.exchange == OweExchange.money)
+              FormRow(
+                icon: incoming
+                    ? Icons.north_east_rounded
+                    : Icons.south_west_rounded,
+                label: incoming ? 'Lent from' : 'Borrowed into',
+                value: controller.exchangeAccount?.name,
+                onTap: () => _pickAccount(exchange: true),
+              )
+            else if (incoming)
+              FormRow(
+                icon: Icons.inventory_2_outlined,
+                label: 'Item given',
+                value: controller.givenAsset?.name,
+                onTap: _pickGivenAsset,
+              )
+            else
+              FormTextRow(
+                // Rebuild once an edited entry's item has loaded.
+                key: ValueKey('item-${controller.itemLoaded}'),
+                icon: Icons.inventory_2_outlined,
+                hint: 'What did you get? e.g. Laptop',
+                value: controller.receivedItem,
+                onChanged: controller.setReceivedItem,
+                capitalization: TextCapitalization.sentences,
+              ),
+          ],
+        ),
+      ],
+      const SizedBox(height: SpaceSize.medium),
+    ];
   }
 
   @override
@@ -238,7 +366,14 @@ class _TransactionScreenState extends State<TransactionScreen> {
                   ),
                 FormRow(
                   icon: Icons.account_balance_wallet_outlined,
-                  label: controller.isOwe ? 'Account (optional)' : 'Account',
+                  // For owes: where the repayment lands / comes from;
+                  // optional, so it reads "Later" until chosen.
+                  label: switch (controller.kind) {
+                    EntryKind.oweIn => 'Repaid into',
+                    EntryKind.oweOut => 'Repay from',
+                    _ => 'Account',
+                  },
+                  placeholder: controller.isOwe ? 'Later' : 'Choose',
                   value: controller.selectedAccount?.name,
                   onTap: _pickAccount,
                   onClear: controller.isOwe
@@ -273,6 +408,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
               ],
             ),
             const SizedBox(height: SpaceSize.medium),
+            if (controller.isOwe) ..._exchangeSection(currency),
             if (controller.canHaveTax) ...[
               GroupedCard(
                 dividerIndent: 56,
@@ -314,11 +450,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                 ),
               ],
             ),
-            if (controller.isOwe)
-              const InfoNote(
-                'Owed money doesn’t change your balance until you mark it as '
-                'paid from the Money owed screen.',
-              ),
+            if (controller.isOwe) InfoNote(_oweNote(currency)),
             if (controller.canHaveTax && controller.taxMinor > 0)
               InfoNote(_taxSummary(currency)),
             if (controller.isTax)

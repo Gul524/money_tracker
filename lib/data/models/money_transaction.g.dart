@@ -23,6 +23,7 @@ MoneyTransaction _$MoneyTransactionFromJson(Map<String, dynamic> json) =>
       completedAt: json['completedAt'] == null
           ? null
           : DateTime.parse(json['completedAt'] as String),
+      exchangeAccountId: (json['exchangeAccountId'] as num?)?.toInt(),
     );
 
 Map<String, dynamic> _$MoneyTransactionToJson(MoneyTransaction instance) =>
@@ -38,6 +39,7 @@ Map<String, dynamic> _$MoneyTransactionToJson(MoneyTransaction instance) =>
       'dueAt': instance.dueAt?.toIso8601String(),
       'oweStatus': _$OweStatusEnumMap[instance.oweStatus],
       'completedAt': instance.completedAt?.toIso8601String(),
+      'exchangeAccountId': instance.exchangeAccountId,
     };
 
 const _$TransactionTypeEnumMap = {
