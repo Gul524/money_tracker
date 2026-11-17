@@ -6,6 +6,7 @@ import 'package:money_tracker/app/screens/app_shell.dart';
 import 'package:money_tracker/app/screens/asset_screen.dart';
 import 'package:money_tracker/app/screens/reports_screen.dart';
 import 'package:money_tracker/app/screens/settings_screen.dart';
+import 'package:money_tracker/app/screens/splash_screen.dart';
 import 'package:money_tracker/app/screens/account_detail_screen.dart';
 import 'package:money_tracker/app/screens/category_screen.dart';
 import 'package:money_tracker/app/screens/defaults_screen.dart';
@@ -472,5 +473,31 @@ void main() {
       await tester.runAsync(() => services.accounts.balanceMinor(1)),
       -80000,
     );
+  });
+  testWidgets('splash plays intro, opens the database, then shows the shell', (
+    tester,
+  ) async {
+    _phoneSize(tester);
+    final services = _services();
+    addTearDown(services.close);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: SplashScreen(services: services),
+      ),
+    );
+    expect(find.bySemanticsLabel(SplashScreen.appName), findsOneWidget);
+    expect(find.text(SplashScreen.tagline), findsOneWidget);
+
+    // Let the real sqflite open finish, then play the intro through.
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 300)),
+    );
+    await tester.pump(const Duration(seconds: 2));
+    await _settle(tester);
+
+    expect(find.byType(SplashScreen), findsNothing);
+    expect(find.byType(AppShell), findsOneWidget);
   });
 }

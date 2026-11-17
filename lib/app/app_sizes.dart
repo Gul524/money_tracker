@@ -11,6 +11,9 @@ abstract final class TextSize {
   static const double largeTitle = 28;
   static const double amount = 32;
   static const double amountInput = 44;
+
+  /// App name on the splash screen.
+  static const double brand = 44;
 }
 
 /// Inner padding for cards and grouped sections.
@@ -57,7 +60,10 @@ abstract final class ComponentSize {
   static const double minTouchTarget = 48;
   static const double buttonHeight = 52;
   static const double navigationBarHeight = 68;
-  static const double splashLogo = 72;
+  static const double splashLogo = 112;
+
+  /// Soft glow drawn behind the splash logo.
+  static const double splashGlow = 240;
 
   /// Left inset of dividers so they align with tile text, not icons.
   static const double tileDividerIndent = 68;

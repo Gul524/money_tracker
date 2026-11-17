@@ -51,13 +51,13 @@ class _CategoryScreenState extends State<CategoryScreen> {
     ];
   }
 
-  /// "Inside Food" (or "Inside Food / Groceries") for a subcategory, so it
+  /// "Inside Food" (or " Food / Groceries") for a subcategory, so it
   /// reads as a child even when its parent sits in another section.
   String? _parentLabel(Category c) {
     if (c.parentId == null) return null;
     final parent = controller.items.where((p) => p.id == c.parentId);
     if (parent.isEmpty) return null;
-    return 'Inside ${controller.pathFor(parent.first)}';
+    return ' ${controller.pathFor(parent.first)}';
   }
 
   Future<void> _edit([Category? existing]) async {

@@ -89,7 +89,7 @@ lib/
       money_amount.dart             MoneyAmount.parse (string → minor int)
       amount_calculator.dart        AmountCalculator: + − × ÷ expression builder, exact (BigInt fraction) evaluation → minor units
       category_path.dart            categoryPath(): "Parent / Child / Leaf"
-      splash_controller.dart        App init state
+      splash_controller.dart        App init state (ready/loading/error; ignores re-entrant initialize, dispose-safe)
       home_controller.dart          Dashboard summary + 5 recent activity
       history_controller.dart       Activity + filters: type, account, category tree, DateRange/DatePreset, text/amount search, totals
       reports_controller.dart       ReportPeriod (month/6 months/year/custom), PeriodReport, category roll-up, position
@@ -103,7 +103,7 @@ lib/
       import_export_controller.dart Period/range for export, entry count, calls transaction_io export/import/template
       defaults_controller.dart      Settings › Defaults state (active wallets, categories, EntryDefaults)
     screens/
-      splash_screen.dart            Brand mark, init, retry; fades to AppShell
+      splash_screen.dart            Gradient backdrop + animated code-drawn logo + "Hissab" name; opens DB; retry; fades to AppShell
       app_shell.dart                NavigationBar (4 tabs, IndexedStack) + "Add" FAB on Home/History
       add_entry_sheet.dart          openAddFlow(): "What would you like to add?" menu → form → "Saved" snackbar
       home_screen.dart              Dashboard ("Overview")
@@ -293,7 +293,7 @@ All (except Splash) extend `BaseController` and call `refresh()` in constructor.
 
 | Controller | State | Methods |
 |---|---|---|
-| `SplashController` (plain ChangeNotifier) | ready, error | `initialize()` → `services.initialize()` |
+| `SplashController` (plain ChangeNotifier) | ready, loading, error | `initialize()` → `services.initialize()` (no-op while loading/ready) |
 | `HomeController` | `summary: DashboardSummary?`, `recentActivity` (5) | `load()` (pull-to-refresh) |
 | `HistoryController(services, {accountId, categoryId, range, preset})` | `items`, `accounts`, `categories`, `filter: ActivityFilter{all, expense, income, transfer, owe, tax}`, `query`, `accountId`, `categoryId`, `range: DateRange?`, `preset: DatePreset{thisMonth,lastMonth,last3Months,thisYear,custom}?` | `setFilter/Query/Account/Category`, `setPreset(p,{now})`, `setRange`, `clearFilters` (not type/search); getters `visibleItems`, `activeFilterCount`, `isFiltering`, `selectedAccount/Category`, `totalsOf(items)` → (in, out) (per-account effect when account filtered). Tax filter = standalone tax OR `taxMinor>0`. Category filter includes all descendants. Search matches title/subtitle/note/party/accountName, and amounts ("1250", "1,250.5", "Rs 1250" → prefix of `amountInputText`, also tax). |
 | `ReportsController(services, {now})` | `period: ReportPeriod{month,sixMonths,year,custom}`, `range: DateRange`, `report: PeriodReport?`, `position: DashboardSummary?` (today), `categories` | `setPeriod` (resets to the current one), `setCustomRange`, `previous()`, `next()`; getters `canStep` (not custom), `canGoNext` (next period has started), `spending`/`earning` → `List<CategoryGroup{categoryId, name, isIncome, icon, color (root's), totalMinor, parts: [(name,total)]}>` (rolled up to top-level category; parts empty if only the parent itself). |
@@ -327,7 +327,7 @@ Based on Material 3 + Apple HIG patterns used by Google Wallet/Pay and iOS Setti
 - Feedback: `EmptyState` with action, `ErrorBanner`, `InfoNote` helper text, `showMessage` snackbar ("Saved"), `confirmDelete` dialog with red Delete.
 
 ### 6.4 Screens & navigation (`lib/app/screens/`)
-Flow: `main` → `SplashScreen` (brand mark, spinner; friendly error + "Try again") → fade `pushReplacement(AppShell)`.
+Flow: `main` → `SplashScreen` → fade+scale `pushReplacement(AppShell)`. Splash: brand gradient (darker palette in dark mode) with drifting glows (`_BackdropPainter`, 9s loop), logo drawn by `_LogoPainter` on a 100×100 grid (tile pops → pages open from spine → ledger lines write → green trend line draws → dot pops), "Hissab" letters rise in staggered, tagline, then a progress bar + "Private · stays on this device". 1.9s intro; navigates only when the intro has finished **and** `services.initialize()` succeeded. On error: white-on-glass message + "Try again". Honors reduce-motion (`disableAnimations` → jumps to end). Light status-bar icons via `AnnotatedRegion`.
 
 **`AppShell`** — `Scaffold(body: IndexedStack[Home, History, Reports, Settings], bottomNavigationBar: NavigationBar (top hairline border), floatingActionButton: FAB.extended "+ Add" (tooltip 'Add') only on Home & History)`. Tabs keep state. Home's `onShowHistory` switches to tab 1.
 
@@ -369,7 +369,7 @@ Exports `formatters.dart` and `category_icons.dart`.
   - Light: bg `#F3F4F6`, surface white, text `#101828`/`#667085`, primary `#2C5BE0`, primaryContainer `#E3EAFD`. Dark: bg `#0C0E13`, surface `#171A21`, text `#ECEEF2`/`#98A2B3`, primary `#8AA8FF`, primaryContainer `#23315C`.
   - Component themes: AppBar (flat, bg = background), NavigationBar (68dp, indicator primaryContainer), FAB (radius 16), Card (border, radius 16), Divider, Input (filled, borderless, radius 12, focus ring primary), Filled/Outlined buttons (52dp, radius 12), SegmentedButton, Chip, BottomSheet (drag handle, radius 28, bg = background), Dialog (radius 20), SnackBar (floating, inverse), DatePicker.
   - Text: displaySmall 32/w700 (hero amounts), headlineMedium 28, headlineSmall 24, titleLarge 20/w600, titleMedium 16/w600, bodyLarge 16, bodyMedium 14, bodySmall 12 (secondary color), labelLarge 14/w600.
-- `app_sizes.dart`: `TextSize{caption 12, small 13, body 14, bodyLarge 16, title 16, headline 20, largeTitle 28, amount 32, amountInput 44}`, `CardSize{padding 16, heroPadding 20}`, `IconSize{small 18, medium 20, large 24, hero 36}`, `RadiusSize{small 8, medium 12, large 16, extraLarge 20, sheet 28}`, `SpaceSize{tiny 2, extraSmall 4, small 8, medium 12, large 16, extraLarge 20, section 28, huge 40, gutter 16, fabClearance 96}`, `ComponentSize{iconBadge 40, minTouchTarget 48, buttonHeight 52, navigationBarHeight 68, splashLogo 72, tileDividerIndent 68}`.
+- `app_sizes.dart`: `TextSize{caption 12, small 13, body 14, bodyLarge 16, title 16, headline 20, largeTitle 28, amount 32, amountInput 44, brand 44}`, `CardSize{padding 16, heroPadding 20}`, `IconSize{small 18, medium 20, large 24, hero 36}`, `RadiusSize{small 8, medium 12, large 16, extraLarge 20, sheet 28}`, `SpaceSize{tiny 2, extraSmall 4, small 8, medium 12, large 16, extraLarge 20, section 28, huge 40, gutter 16, fabClearance 96}`, `ComponentSize{iconBadge 40, minTouchTarget 48, buttonHeight 52, navigationBarHeight 68, splashLogo 112, splashGlow 240, tileDividerIndent 68}`.
 - `ui_ux.json` v2 documents the design (not loaded at runtime).
 
 ---
