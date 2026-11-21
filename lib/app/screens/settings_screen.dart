@@ -7,6 +7,7 @@ import '../widgets/app_widgets.dart';
 import 'account_screen.dart';
 import 'asset_screen.dart';
 import 'category_screen.dart';
+import 'tax_screen.dart';
 import 'defaults_screen.dart';
 import 'import_export_screen.dart';
 import 'owe_screen.dart';
@@ -165,6 +166,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         title: 'Categories',
                         subtitle: 'Groups for income and expenses',
                         onTap: () => _open(CategoryScreen(services: services)),
+                      ),
+                      AppTile(
+                        leading: const IconBadge(Icons.receipt_long_outlined),
+                        title: 'Tax',
+                        subtitle: 'Sales tax, income tax and their rates',
+                        onTap: () => _open(TaxScreen(services: services)),
                       ),
                       AppTile(
                         leading: const IconBadge(Icons.handshake_outlined),

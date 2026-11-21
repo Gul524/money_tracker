@@ -13,6 +13,11 @@ TaxPayment _$TaxPaymentFromJson(Map<String, dynamic> json) => TaxPayment(
   accountId: (json['accountId'] as num).toInt(),
   note: json['note'] as String?,
   transactionId: (json['transactionId'] as num?)?.toInt(),
+  taxRateId: (json['taxRateId'] as num?)?.toInt(),
+  taxName: json['taxName'] as String?,
+  taxCode: json['taxCode'] as String?,
+  rateBasisPoints: (json['rateBasisPoints'] as num?)?.toInt(),
+  inclusive: json['inclusive'] as bool?,
 );
 
 Map<String, dynamic> _$TaxPaymentToJson(TaxPayment instance) =>
@@ -23,4 +28,9 @@ Map<String, dynamic> _$TaxPaymentToJson(TaxPayment instance) =>
       'accountId': instance.accountId,
       'note': instance.note,
       'transactionId': instance.transactionId,
+      'taxRateId': instance.taxRateId,
+      'taxName': instance.taxName,
+      'taxCode': instance.taxCode,
+      'rateBasisPoints': instance.rateBasisPoints,
+      'inclusive': instance.inclusive,
     };

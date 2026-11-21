@@ -15,6 +15,11 @@ class TaxRepository extends CrudRepository<TaxPayment> {
     accountId: row['account_id'] as int,
     note: row['note'] as String?,
     transactionId: row['transaction_id'] as int?,
+    taxRateId: row['tax_rate_id'] as int?,
+    taxName: row['tax_name'] as String?,
+    taxCode: row['tax_code'] as String?,
+    rateBasisPoints: row['rate_bp'] as int?,
+    inclusive: row['inclusive'] == null ? null : row['inclusive'] == 1,
   );
 
   @override
@@ -25,6 +30,11 @@ class TaxRepository extends CrudRepository<TaxPayment> {
     'account_id': value.accountId,
     'note': value.note,
     'transaction_id': value.transactionId,
+    'tax_rate_id': value.taxRateId,
+    'tax_name': value.taxName,
+    'tax_code': value.taxCode,
+    'rate_bp': value.rateBasisPoints,
+    'inclusive': value.inclusive == null ? null : (value.inclusive! ? 1 : 0),
   };
 
   @override

@@ -25,6 +25,7 @@ class ActivityItem {
     this.tax,
     this.transfer,
     this.taxMinor = 0,
+    this.taxLabel,
     this.accountIds = const {},
     this.accountName,
     this.categoryId,
@@ -49,6 +50,26 @@ class ActivityItem {
 
   /// Tax recorded together with this transaction (0 when none).
   final int taxMinor;
+
+  /// Code or name of the tax (linked or standalone), e.g. `GST`; null when
+  /// the tax has no name (custom amount or saved before tax management).
+  final String? taxLabel;
+
+  bool get _isIncomeOrExpense =>
+      transaction?.type == TransactionType.income ||
+      transaction?.type == TransactionType.expense;
+
+  /// Income/expense before tax. An expense's amount is before tax (the
+  /// wallet pays amount + tax); an income's amount includes it (the wallet
+  /// keeps amount − tax).
+  int get subtotalMinor => !_isIncomeOrExpense
+      ? amountMinor.abs()
+      : transaction!.type == TransactionType.expense
+      ? amountMinor.abs()
+      : amountMinor - taxMinor;
+
+  /// Subtotal + tax.
+  int get totalMinor => subtotalMinor + (_isIncomeOrExpense ? taxMinor : 0);
 
   /// Accounts this entry touches (both sides for a transfer).
   final Set<int> accountIds;
@@ -133,7 +154,7 @@ class ActivityService {
     final accounts = {for (final a in await _accounts.getAll()) a.id!: a.name};
     final linkedTax = {
       for (final t in taxes)
-        if (t.transactionId != null) t.transactionId!: t.amountMinor,
+        if (t.transactionId != null) t.transactionId!: t,
     };
     final standaloneTax = taxes.where((t) => t.transactionId == null);
     final bought = <int, String>{};
@@ -185,7 +206,8 @@ class ActivityService {
           kind: ActivityKind.transaction,
           isPending: t.oweStatus == OweStatus.pending,
           transaction: t,
-          taxMinor: linkedTax[t.id] ?? 0,
+          taxMinor: linkedTax[t.id]?.amountMinor ?? 0,
+          taxLabel: linkedTax[t.id]?.label,
           accountIds: {?t.accountId, ?t.exchangeAccountId},
           accountName: t.accountId == null ? null : accounts[t.accountId],
           categoryId: t.categoryId,
@@ -195,8 +217,11 @@ class ActivityService {
         ),
       for (final t in limit == null ? standaloneTax : standaloneTax.take(limit))
         ActivityItem(
-          title: 'Tax payment',
+          title: (t.taxName ?? '').trim().isEmpty
+              ? 'Tax payment'
+              : t.taxName!.trim(),
           subtitle: (t.note ?? '').trim().isEmpty ? 'Paid tax' : t.note!,
+          taxLabel: t.label,
           amountMinor: -t.amountMinor,
           date: t.paidAt,
           kind: ActivityKind.tax,

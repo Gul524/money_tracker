@@ -17,7 +17,7 @@ class LocalDatabase {
     _database = await _factory.openDatabase(
       databasePath,
       options: OpenDatabaseOptions(
-        version: 6,
+        version: 7,
         onConfigure: (db) async => db.execute('PRAGMA foreign_keys = ON'),
         onCreate: _createSchema,
         onUpgrade: _upgradeSchema,
@@ -113,6 +113,8 @@ class LocalDatabase {
         transaction_id INTEGER REFERENCES transactions(id) ON DELETE CASCADE
       )
     ''');
+    await _createTaxRates(db);
+    await _addTaxSnapshotColumns(db);
     await db.execute(
       'CREATE INDEX tax_payments_date_idx ON tax_payments(paid_at)',
     );
@@ -173,6 +175,50 @@ class LocalDatabase {
         );
       }
       if (tx.isNotEmpty && assets.isNotEmpty) await _createOweLinkIndexes(db);
+    }
+    if (oldVersion < 7) {
+      // Managed taxes, and a copy of the tax on each payment so editing a
+      // tax never changes old entries.
+      await _createTaxRates(db);
+      if ((await _columnNames(db, 'tax_payments')).isNotEmpty) {
+        await _addTaxSnapshotColumns(db);
+      }
+    }
+  }
+
+  Future<void> _createTaxRates(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS tax_rates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        code TEXT NOT NULL CHECK(length(code) = 3),
+        rate_bp INTEGER NOT NULL CHECK(rate_bp > 0 AND rate_bp <= 10000),
+        inclusive INTEGER NOT NULL DEFAULT 0 CHECK(inclusive IN (0, 1)),
+        CHECK(length(trim(name)) > 0)
+      )
+    ''');
+    await db.execute(
+      'CREATE UNIQUE INDEX IF NOT EXISTS tax_rates_code_idx '
+      'ON tax_rates(code COLLATE NOCASE)',
+    );
+  }
+
+  /// Adds the tax copy columns to `tax_payments` (each skipped if present).
+  Future<void> _addTaxSnapshotColumns(Database db) async {
+    final existing = await _columnNames(db, 'tax_payments');
+    const columns = {
+      'tax_rate_id': 'INTEGER REFERENCES tax_rates(id) ON DELETE SET NULL',
+      'tax_name': 'TEXT',
+      'tax_code': 'TEXT',
+      'rate_bp': 'INTEGER CHECK(rate_bp IS NULL OR rate_bp > 0)',
+      'inclusive': 'INTEGER CHECK(inclusive IS NULL OR inclusive IN (0, 1))',
+    };
+    for (final c in columns.entries) {
+      if (!existing.contains(c.key)) {
+        await db.execute(
+          'ALTER TABLE tax_payments ADD COLUMN ${c.key} ${c.value}',
+        );
+      }
     }
   }
 

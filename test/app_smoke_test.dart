@@ -14,6 +14,9 @@ import 'package:money_tracker/data/models/account.dart';
 import 'package:money_tracker/data/models/account_transfer.dart';
 import 'package:money_tracker/data/models/category.dart';
 import 'package:money_tracker/data/models/model_types.dart';
+import 'package:money_tracker/app/widgets/app_widgets.dart';
+import 'package:money_tracker/app/screens/tax_screen.dart';
+import 'package:money_tracker/data/models/tax_rate.dart';
 import 'package:money_tracker/data/services/local_database.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -38,6 +41,11 @@ Future<void> _settle(WidgetTester tester) async {
   );
   await tester.pumpAndSettle();
 }
+
+/// The vertical list of a form screen (not the horizontal chip row).
+final _formScroll = find
+    .descendant(of: find.byType(ListView), matching: find.byType(Scrollable))
+    .first;
 
 Finder _nav(String label) =>
     find.descendant(of: find.byType(NavigationBar), matching: find.text(label));
@@ -127,13 +135,24 @@ void main() {
     await tester.pumpAndSettle();
     // The seeded Cash account is the only one, so it is preselected.
     expect(find.text('Cash'), findsOneWidget);
+    // No taxes are set up, so record a custom tax amount.
+    await tester.tap(find.widgetWithText(FormRow, 'Tax'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Custom amount'));
+    await tester.pumpAndSettle();
     final taxField = find.ancestor(
-      of: find.text('Tax paid (optional)'),
+      of: find.text('Tax amount'),
       matching: find.byType(TextField),
     );
     await tester.enterText(taxField, '100');
     await tester.pumpAndSettle();
-    expect(find.textContaining('Rs 1,350.50 leaves Cash'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.textContaining('Rs 1,350.50 leaves Cash'),
+      100,
+      scrollable: _formScroll,
+    );
+    expect(find.text('Subtotal'), findsOneWidget);
+    expect(find.text('Total'), findsOneWidget);
 
     await tester.tap(find.text('Save'));
     await _settle(tester);
@@ -499,5 +518,92 @@ void main() {
 
     expect(find.byType(SplashScreen), findsNothing);
     expect(find.byType(AppShell), findsOneWidget);
+  });
+
+  testWidgets('taxes are managed in settings and worked out on an expense', (
+    tester,
+  ) async {
+    _phoneSize(tester);
+    final services = _services();
+    addTearDown(services.close);
+    await tester.runAsync(services.initialize);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: TaxScreen(services: services),
+      ),
+    );
+    await _settle(tester);
+    expect(find.text('No taxes yet'), findsOneWidget);
+
+    await tester.tap(find.text('Add tax').first);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Tax name'),
+      'Sales tax',
+    );
+    await tester.enterText(find.widgetWithText(TextFormField, 'Code'), 'gst');
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Percentage'),
+      '17',
+    );
+    await tester.tap(find.text('Save'));
+    await _settle(tester);
+    expect(find.text('Sales tax'), findsOneWidget);
+    expect(find.text('GST'), findsOneWidget);
+    expect(find.text('17% · Added on top'), findsOneWidget);
+    final saved = await tester.runAsync(services.taxRates.getAll);
+    expect(saved!.single.code, 'GST');
+
+    // Pick it on a new expense: the tax and total are worked out.
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: AppShell(services: services),
+      ),
+    );
+    await _settle(tester);
+    await tester.tap(find.byTooltip('Add'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Expense'));
+    await _settle(tester);
+    await tester.enterText(find.byType(TextField).first, '1000');
+    await tester.tap(find.text('Category'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Food'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FormRow, 'Tax'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Sales tax'));
+    await tester.pumpAndSettle();
+    expect(find.text('Tax (GST 17%)'), findsOneWidget);
+    expect(find.text('Rs 170.00'), findsOneWidget);
+    expect(find.text('Rs 1,170.00'), findsOneWidget);
+
+    // Amount already includes the tax.
+    await tester.scrollUntilVisible(
+      find.text('Amount includes tax'),
+      100,
+      scrollable: _formScroll,
+    );
+    await tester.tap(find.text('Amount includes tax'));
+    await tester.pumpAndSettle();
+    expect(find.text('Rs 854.70'), findsOneWidget);
+    expect(find.text('Rs 145.30'), findsOneWidget);
+
+    await tester.tap(find.text('Save'));
+    await _settle(tester);
+    await _settle(tester);
+    final tax = (await tester.runAsync(services.taxes.getAll))!.single;
+    expect(tax.amountMinor, 14530);
+    expect(
+      (tax.taxCode, tax.rateBasisPoints, tax.inclusive),
+      ('GST', 1700, true),
+    );
+    expect(formatRate(tax.rateBasisPoints!), '17%');
+    expect(
+      await tester.runAsync(() => services.accounts.balanceMinor(1)),
+      -100000,
+    );
   });
 }

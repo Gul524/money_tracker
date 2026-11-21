@@ -627,8 +627,12 @@ class ActivityTile extends StatelessWidget {
     // did to that account.
     final owesHere =
         item.isOwe && accountId != null && t!.exchangeAccountId == accountId;
+    final hasLinkedTax = isCategoryEntry && item.taxMinor > 0;
     final amount = (isTransfer || owesHere) && accountId != null
         ? item.effectOn(accountId!)
+        // With tax, the row shows the total (subtotal + tax).
+        : hasLinkedTax
+        ? item.totalMinor * item.amountMinor.sign
         : item.amountMinor;
     final tone = item.isPending || isTransfer
         ? AmountTone.muted
@@ -646,7 +650,11 @@ class ActivityTile extends StatelessWidget {
       ?item.linkLabel,
       if (!isTransfer && accountId == null && item.accountName != null)
         item.accountName!,
-      if (item.taxMinor > 0) 'Tax ${money(item.taxMinor, currency)}',
+      if (hasLinkedTax)
+        '${money(item.subtotalMinor, currency)} + '
+            '${item.taxLabel ?? 'Tax'} ${money(item.taxMinor, currency)}'
+      else if (item.kind == ActivityKind.tax && item.taxLabel != null)
+        item.taxLabel!,
       if (showDate) relativeDay(item.date),
     ].join(' · ');
 

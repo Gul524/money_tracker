@@ -4,6 +4,7 @@ import '../../data/models/category.dart';
 import '../../data/models/model_types.dart';
 import '../../data/models/money_transaction.dart';
 import '../../data/models/tax_payment.dart';
+import '../../data/models/tax_rate.dart';
 import '../../data/repo/transaction_repository.dart';
 import '../../data/services/defaults_service.dart';
 import 'base_controller.dart';
@@ -17,6 +18,11 @@ enum EntryKind { income, expense, oweIn, oweOut, tax }
 /// - [money]: lent from a wallet (owed to me) / borrowed into one (I owe).
 /// - [item]: an asset given away (owed to me) / a thing received (I owe).
 enum OweExchange { none, money, item }
+
+/// How tax is added to an income or expense:
+/// - [rate]: worked out from a managed tax's percentage.
+/// - [custom]: an amount typed by the user.
+enum TaxMode { none, rate, custom }
 
 class TransactionController extends BaseController {
   TransactionController(
@@ -33,6 +39,14 @@ class TransactionController extends BaseController {
       accountId = existingTax.accountId;
       occurredAt = existingTax.paidAt;
       note = existingTax.note ?? '';
+      if (existingTax.label != null) {
+        selectedTax = TaxDetails(
+          taxRateId: existingTax.taxRateId,
+          name: existingTax.taxName,
+          code: existingTax.taxCode,
+          rateBasisPoints: existingTax.rateBasisPoints,
+        );
+      }
     }
     if (existing != null) {
       kind = EntryKind.values.byName(existing.type.name);
@@ -55,8 +69,25 @@ class TransactionController extends BaseController {
   final TaxPayment? editingTax;
   bool get isEditing => editing != null || editingTax != null;
 
-  /// Tax paid together with an income or expense, as typed.
+  /// Custom tax amount, as typed ([TaxMode.custom]).
   String taxText = '';
+
+  TaxMode taxMode = TaxMode.none;
+
+  /// The tax picked for this entry, copied from the managed tax when it was
+  /// picked (or from the saved entry), so later edits of the tax don't
+  /// change it. For a standalone tax payment it only names the tax.
+  TaxDetails? selectedTax;
+
+  /// Whether the typed amount already includes the tax.
+  bool taxInclusive = false;
+
+  /// Managed taxes (Settings › Tax).
+  List<TaxRate> taxRates = [];
+
+  /// Bumped when the controller rewrites [amountText] (an edited entry's
+  /// amount is shown with or without its tax), so the screen can sync.
+  int amountRevision = 0;
 
   /// Becomes true once an edited transaction's linked tax has been loaded.
   bool taxLoaded = false;
@@ -98,9 +129,42 @@ class TransactionController extends BaseController {
   /// Only income and expense entries can carry tax.
   bool get canHaveTax => kind == EntryKind.income || kind == EntryKind.expense;
 
-  /// Parsed amount and tax, or null while the text isn't a valid amount.
+  /// Parsed amount, or null while the text isn't a valid amount.
   int? get amountMinor => _tryParse(amountText);
-  int get taxMinor => _tryParse(taxText) ?? 0;
+
+  /// The typed amount split into subtotal and tax.
+  TaxSplit get taxSplit {
+    final amount = amountMinor ?? 0;
+    if (!canHaveTax) return TaxSplit(amount, 0);
+    switch (taxMode) {
+      case TaxMode.none:
+        return TaxSplit(amount, 0);
+      case TaxMode.rate:
+        return splitTax(
+          amount,
+          selectedTax?.rateBasisPoints ?? 0,
+          inclusive: taxInclusive,
+        );
+      case TaxMode.custom:
+        final tax = _tryParse(taxText) ?? 0;
+        return taxInclusive
+            ? TaxSplit(amount - tax, tax)
+            : TaxSplit(amount, tax);
+    }
+  }
+
+  int get taxMinor => taxSplit.taxMinor;
+
+  /// e.g. `GST 17%`, `Custom`, or null when there is no tax.
+  String? get taxLabel => switch (taxMode) {
+    TaxMode.none => null,
+    TaxMode.custom => 'Custom',
+    TaxMode.rate => [
+      selectedTax?.code ?? selectedTax?.name ?? 'Tax',
+      if (selectedTax?.rateBasisPoints != null)
+        formatRate(selectedTax!.rateBasisPoints!),
+    ].join(' '),
+  };
 
   int? _tryParse(String text) {
     if (text.trim().isEmpty) return null;
@@ -163,9 +227,10 @@ class TransactionController extends BaseController {
         }
       }
       itemLoaded = true;
+      taxRates = await services.taxRates.sorted();
       if (editing?.id != null && !taxLoaded) {
         final tax = await services.taxes.forTransaction(editing!.id!);
-        if (tax != null) taxText = amountInputText(tax.amountMinor);
+        if (tax != null) _loadLinkedTax(editing!, tax);
       }
       taxLoaded = true;
       defaults = await services.defaults.load();
@@ -183,6 +248,69 @@ class TransactionController extends BaseController {
         accountId = accounts.first.id;
       }
     });
+  }
+
+  /// Shows an edited entry's tax the way it was entered.
+  void _loadLinkedTax(MoneyTransaction tx, TaxPayment tax) {
+    final isExpense = tx.type == TransactionType.expense;
+    // Entries saved before tax management: an expense's amount was before
+    // tax and an income's included it.
+    taxInclusive = tax.inclusive ?? !isExpense;
+    if (tax.rateBasisPoints != null) {
+      taxMode = TaxMode.rate;
+      selectedTax = TaxDetails(
+        taxRateId: tax.taxRateId,
+        name: tax.taxName,
+        code: tax.taxCode,
+        rateBasisPoints: tax.rateBasisPoints,
+        inclusive: taxInclusive,
+      );
+    } else {
+      taxMode = TaxMode.custom;
+      taxText = amountInputText(tax.amountMinor);
+    }
+    final subtotal = isExpense
+        ? tx.amountMinor
+        : tx.amountMinor - tax.amountMinor;
+    amountText = amountInputText(
+      taxInclusive ? subtotal + tax.amountMinor : subtotal,
+    );
+    amountRevision++;
+  }
+
+  /// Uses [rate]'s current percentage; its "includes tax" setting becomes
+  /// the starting choice.
+  void setTaxRate(TaxRate rate) {
+    selectedTax = TaxDetails(
+      taxRateId: rate.id,
+      name: rate.name,
+      code: rate.code,
+      rateBasisPoints: rate.rateBasisPoints,
+      inclusive: rate.inclusive,
+    );
+    if (!isTax) {
+      taxMode = TaxMode.rate;
+      taxInclusive = rate.inclusive;
+    }
+    changed();
+  }
+
+  void setCustomTax() {
+    taxMode = TaxMode.custom;
+    selectedTax = null;
+    changed();
+  }
+
+  void clearTax() {
+    taxMode = TaxMode.none;
+    selectedTax = null;
+    taxText = '';
+    changed();
+  }
+
+  void setTaxInclusive(bool value) {
+    taxInclusive = value;
+    changed();
   }
 
   void setKind(EntryKind value) {
@@ -295,6 +423,10 @@ class TransactionController extends BaseController {
             paidAt: occurredAt,
             accountId: accountId!,
             note: note.trim(),
+            taxRateId: selectedTax?.taxRateId,
+            taxName: selectedTax?.name,
+            taxCode: selectedTax?.code,
+            rateBasisPoints: selectedTax?.rateBasisPoints,
           );
           if (editingTax == null) {
             await services.taxes.create(tax);
@@ -328,10 +460,26 @@ class TransactionController extends BaseController {
               item = OweItem.received(receivedItem.trim());
             }
           }
+          if (canHaveTax &&
+              taxMode == TaxMode.custom &&
+              taxText.trim().isNotEmpty) {
+            MoneyAmount.parse(taxText, allowZero: true); // reports bad input
+          }
+          final split = taxSplit;
+          if (split.subtotalMinor <= 0) {
+            throw ArgumentError('Tax must be less than the amount');
+          }
+          // An expense stores its amount before tax (the wallet pays amount +
+          // tax); an income stores it with tax (the wallet keeps amount − tax).
+          final stored = switch (kind) {
+            EntryKind.expense => split.subtotalMinor,
+            EntryKind.income => split.totalMinor,
+            _ => amount,
+          };
           final transaction = MoneyTransaction(
             id: editing?.id,
             type: TransactionType.values.byName(kind.name),
-            amountMinor: amount,
+            amountMinor: stored,
             categoryId: categoryId!,
             accountId: accountId,
             occurredAt: occurredAt,
@@ -342,12 +490,24 @@ class TransactionController extends BaseController {
             party: isOwe ? party.trim() : null,
             exchangeAccountId: lendsMoney ? exchangeAccountId : null,
           );
-          final tax = canHaveTax && taxText.trim().isNotEmpty
-              ? MoneyAmount.parse(taxText, allowZero: true)
-              : 0;
           await services.transactions.saveWithTax(
             transaction,
-            taxMinor: tax,
+            taxMinor: split.taxMinor,
+            taxDetails: !canHaveTax
+                ? null
+                : switch (taxMode) {
+                    TaxMode.none => null,
+                    TaxMode.custom => TaxDetails.custom(
+                      inclusive: taxInclusive,
+                    ),
+                    TaxMode.rate => TaxDetails(
+                      taxRateId: selectedTax?.taxRateId,
+                      name: selectedTax?.name,
+                      code: selectedTax?.code,
+                      rateBasisPoints: selectedTax?.rateBasisPoints,
+                      inclusive: taxInclusive,
+                    ),
+                  },
             item: item,
           );
         }

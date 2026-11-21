@@ -2,6 +2,7 @@ import 'package:sqflite/sqflite.dart';
 
 import '../models/model_types.dart';
 import '../models/money_transaction.dart';
+import '../models/tax_payment.dart';
 import 'category_repository.dart';
 import 'crud_repository.dart';
 
@@ -173,6 +174,7 @@ class TransactionRepository extends CrudRepository<MoneyTransaction> {
   Future<MoneyTransaction> saveWithTax(
     MoneyTransaction value, {
     int taxMinor = 0,
+    TaxDetails? taxDetails,
     OweItem? item,
   }) async {
     if (taxMinor < 0) throw ArgumentError('Tax cannot be negative');
@@ -226,6 +228,8 @@ class TransactionRepository extends CrudRepository<MoneyTransaction> {
           'paid_at': value.occurredAt.toIso8601String(),
           'account_id': value.accountId,
           'transaction_id': id,
+          // No details (e.g. imported rows): a plain amount, as before.
+          ...taxDetails?.toRow() ?? TaxDetails.none,
         };
         final updated = await txn.update(
           'tax_payments',

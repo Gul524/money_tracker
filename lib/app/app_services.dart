@@ -4,6 +4,7 @@ import 'package:flutter/material.dart' show ThemeMode;
 import '../data/repo/account_repository.dart';
 import '../data/repo/asset_repository.dart';
 import '../data/repo/category_repository.dart';
+import '../data/repo/tax_rate_repository.dart';
 import '../data/repo/tax_repository.dart';
 import '../data/repo/transaction_repository.dart';
 import '../data/repo/transfer_repository.dart';
@@ -22,6 +23,7 @@ class AppServices extends ChangeNotifier {
       transactions = TransactionRepository(database),
       transfers = TransferRepository(database),
       taxes = TaxRepository(database),
+      taxRates = TaxRateRepository(database),
       dashboard = DashboardService(database),
       activity = ActivityService(database),
       reports = ReportService(database),
@@ -39,6 +41,9 @@ class AppServices extends ChangeNotifier {
   final TransactionRepository transactions;
   final TransferRepository transfers;
   final TaxRepository taxes;
+
+  /// Taxes managed in Settings › Tax.
+  final TaxRateRepository taxRates;
   final DashboardService dashboard;
   final ActivityService activity;
   final ReportService reports;

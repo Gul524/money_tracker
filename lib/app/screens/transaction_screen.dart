@@ -8,7 +8,9 @@ import '../app_sizes.dart';
 import '../app_theme.dart';
 import '../controllers/transaction_controller.dart';
 import '../widgets/app_widgets.dart';
+import '../../data/models/tax_rate.dart';
 import 'category_screen.dart';
+import 'tax_screen.dart';
 
 /// Add or edit an income, expense, owe or tax payment. Income and expense
 /// can also record tax paid with them.
@@ -41,6 +43,7 @@ const _kindLabels = {
 class _TransactionScreenState extends State<TransactionScreen> {
   late final TransactionController controller;
   late final TextEditingController amount;
+  int _amountRevision = 0;
 
   bool get _editing => widget.existing != null || widget.existingTax != null;
 
@@ -54,6 +57,15 @@ class _TransactionScreenState extends State<TransactionScreen> {
       initialKind: widget.initialKind,
     );
     amount = TextEditingController(text: controller.amountText);
+    controller.addListener(_syncAmount);
+  }
+
+  /// An edited entry's amount is shown with or without its tax once the
+  /// tax has loaded.
+  void _syncAmount() {
+    if (controller.amountRevision == _amountRevision) return;
+    _amountRevision = controller.amountRevision;
+    amount.text = controller.amountText;
   }
 
   @override
@@ -106,15 +118,152 @@ class _TransactionScreenState extends State<TransactionScreen> {
   /// Explains how the tax changes the account, e.g. "Rs 1,170.00 leaves
   /// Cash: Rs 1,000.00 plus Rs 170.00 tax."
   String _taxSummary(String currency) {
-    final amount = controller.amountMinor ?? 0;
-    final tax = controller.taxMinor;
+    final split = controller.taxSplit;
     final account = controller.selectedAccount?.name ?? 'the account';
     if (controller.kind == EntryKind.income) {
-      return '$account receives ${money(amount - tax, currency)}: '
-          '${money(amount, currency)} minus ${money(tax, currency)} tax.';
+      return '$account receives ${money(split.subtotalMinor, currency)}: '
+          '${money(split.totalMinor, currency)} minus '
+          '${money(split.taxMinor, currency)} tax.';
     }
-    return '${money(amount + tax, currency)} leaves $account: '
-        '${money(amount, currency)} plus ${money(tax, currency)} tax.';
+    return '${money(split.totalMinor, currency)} leaves $account: '
+        '${money(split.subtotalMinor, currency)} plus '
+        '${money(split.taxMinor, currency)} tax.';
+  }
+
+  static const _noTax = -1;
+  static const _customTax = -2;
+
+  /// Picks a managed tax, a custom amount or no tax. For a standalone tax
+  /// payment it only names the tax.
+  Future<void> _pickTax() async {
+    final standalone = controller.isTax;
+    final selected = switch (controller.taxMode) {
+      _ when standalone => controller.selectedTax?.taxRateId ?? _noTax,
+      TaxMode.none => _noTax,
+      TaxMode.custom => _customTax,
+      TaxMode.rate => controller.selectedTax?.taxRateId,
+    };
+    final picked = await showPickerSheet<int>(
+      context,
+      title: standalone ? 'Which tax?' : 'Tax',
+      selected: selected,
+      options: [
+        PickerOption(
+          value: _noTax,
+          title: standalone ? 'Not specified' : 'No tax',
+          icon: Icons.block_rounded,
+        ),
+        for (final t in controller.taxRates)
+          PickerOption(
+            value: t.id!,
+            title: t.name,
+            subtitle:
+                '${formatRate(t.rateBasisPoints)} · '
+                '${t.inclusive ? 'Included in amount' : 'Added on top'}',
+            leading: TaxCodeBadge(t.code),
+          ),
+        if (!standalone)
+          const PickerOption(
+            value: _customTax,
+            title: 'Custom amount',
+            subtitle: 'Type the tax yourself',
+            icon: Icons.edit_outlined,
+          ),
+      ],
+      footerLabel: 'Manage taxes',
+      onFooter: () async {
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => TaxScreen(services: widget.services),
+          ),
+        );
+        controller.refresh();
+      },
+    );
+    if (picked == null) return;
+    if (picked == _noTax) {
+      controller.clearTax();
+    } else if (picked == _customTax) {
+      controller.setCustomTax();
+    } else {
+      final rate = controller.taxRates.where((t) => t.id == picked).firstOrNull;
+      if (rate != null) controller.setTaxRate(rate);
+    }
+  }
+
+  List<Widget> _taxSection(String currency) {
+    final hasTax = controller.taxMode != TaxMode.none;
+    final split = controller.taxSplit;
+    return [
+      GroupedCard(
+        dividerIndent: 56,
+        children: [
+          FormRow(
+            icon: Icons.receipt_long_outlined,
+            label: 'Tax',
+            placeholder: 'None',
+            value: switch (controller.taxMode) {
+              TaxMode.none => null,
+              TaxMode.custom => 'Custom amount',
+              TaxMode.rate => controller.taxLabel,
+            },
+            onTap: _pickTax,
+            onClear: hasTax ? controller.clearTax : null,
+          ),
+          if (controller.taxMode == TaxMode.custom)
+            FormTextRow(
+              // Rebuild once an edited entry's saved tax has loaded.
+              key: ValueKey('tax-${controller.taxLoaded}'),
+              icon: Icons.edit_outlined,
+              hint: 'Tax amount',
+              value: controller.taxText,
+              onChanged: controller.setTax,
+              amount: true,
+              prefixText: '${currencySymbol(currency)} ',
+              suffixText: 'tax',
+            ),
+          if (hasTax)
+            CheckboxListTile(
+              controlAffinity: ListTileControlAffinity.leading,
+              title: const Text('Amount includes tax'),
+              subtitle: Text(
+                controller.taxInclusive
+                    ? 'Tax is taken out of the amount'
+                    : 'Tax is added on top of the amount',
+              ),
+              value: controller.taxInclusive,
+              onChanged: (v) => controller.setTaxInclusive(v ?? false),
+            ),
+        ],
+      ),
+      if (hasTax) ...[
+        const SizedBox(height: SpaceSize.medium),
+        GroupedCard(
+          children: [
+            _TotalRow(
+              label: 'Subtotal',
+              minor: split.subtotalMinor,
+              currency: currency,
+            ),
+            _TotalRow(
+              label: switch (controller.taxMode) {
+                TaxMode.rate => 'Tax (${controller.taxLabel})',
+                _ => 'Tax',
+              },
+              minor: split.taxMinor,
+              currency: currency,
+            ),
+            _TotalRow(
+              label: 'Total',
+              minor: split.totalMinor,
+              currency: currency,
+              strong: true,
+            ),
+          ],
+        ),
+      ],
+      const SizedBox(height: SpaceSize.medium),
+    ];
   }
 
   Future<void> _pickCategory() async {
@@ -409,20 +558,20 @@ class _TransactionScreenState extends State<TransactionScreen> {
             ),
             const SizedBox(height: SpaceSize.medium),
             if (controller.isOwe) ..._exchangeSection(currency),
-            if (controller.canHaveTax) ...[
+            if (controller.canHaveTax) ..._taxSection(currency),
+            if (controller.isTax) ...[
               GroupedCard(
                 dividerIndent: 56,
                 children: [
-                  FormTextRow(
-                    // Rebuild once an edited entry's saved tax has loaded.
-                    key: ValueKey('tax-${controller.taxLoaded}'),
+                  FormRow(
                     icon: Icons.receipt_long_outlined,
-                    hint: 'Tax paid (optional)',
-                    value: controller.taxText,
-                    onChanged: controller.setTax,
-                    amount: true,
-                    prefixText: '${currencySymbol(currency)} ',
-                    suffixText: 'tax paid',
+                    label: 'Tax type',
+                    placeholder: 'Optional',
+                    value: controller.selectedTax?.name,
+                    onTap: _pickTax,
+                    onClear: controller.selectedTax == null
+                        ? null
+                        : controller.clearTax,
                   ),
                 ],
               ),
@@ -470,6 +619,45 @@ class _TransactionScreenState extends State<TransactionScreen> {
       );
     },
   );
+}
+
+/// One line of the Subtotal / Tax / Total breakdown.
+class _TotalRow extends StatelessWidget {
+  const _TotalRow({
+    required this.label,
+    required this.minor,
+    required this.currency,
+    this.strong = false,
+  });
+  final String label;
+  final int minor;
+  final String currency;
+  final bool strong;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final style = strong
+        ? theme.textTheme.titleMedium
+        : theme.textTheme.bodyLarge?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          );
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: SpaceSize.large,
+        vertical: SpaceSize.medium,
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(label, style: style, overflow: TextOverflow.ellipsis),
+          ),
+          const SizedBox(width: SpaceSize.medium),
+          AmountText(minor, currency: currency, style: style),
+        ],
+      ),
+    );
+  }
 }
 
 class _KindSelector extends StatelessWidget {
