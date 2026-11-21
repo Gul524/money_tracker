@@ -43,6 +43,7 @@ class TransactionRepository extends CrudRepository<MoneyTransaction> {
         : OweStatus.values.byName(row['owe_status'] as String),
     completedAt: _parseDate(row['completed_at']),
     exchangeAccountId: row['exchange_account_id'] as int?,
+    parentId: row['parent_id'] as int?,
   );
 
   DateTime? _parseDate(Object? value) =>
@@ -62,6 +63,7 @@ class TransactionRepository extends CrudRepository<MoneyTransaction> {
     'owe_status': value.oweStatus?.name,
     'completed_at': value.completedAt?.toIso8601String(),
     'exchange_account_id': value.exchangeAccountId,
+    'parent_id': value.parentId,
   };
 
   @override
@@ -136,6 +138,69 @@ class TransactionRepository extends CrudRepository<MoneyTransaction> {
         completedAt: at ?? DateTime.now(),
       ),
     );
+  }
+
+  /// Pays part of a pending owe: the owe keeps what is left and a completed
+  /// copy for [amountMinor] (same party, category and money link) records the
+  /// payment, so balances and reports need no special case. Paying the whole
+  /// remainder settles the owe itself.
+  Future<void> payPart(
+    int id,
+    int amountMinor,
+    int accountId, {
+    DateTime? at,
+    String? note,
+  }) async {
+    final owe = await getById(id);
+    if (owe == null) throw StateError('Transaction $id does not exist');
+    if (owe.oweStatus != OweStatus.pending) {
+      throw StateError('Only a pending owe can be paid');
+    }
+    if (amountMinor <= 0) throw ArgumentError('Amount must be positive');
+    if (amountMinor > owe.amountMinor) {
+      throw ArgumentError('That is more than what is still owed');
+    }
+    final when = at ?? DateTime.now();
+    if (amountMinor == owe.amountMinor) {
+      await completeOwe(id, accountId, at: when);
+      return;
+    }
+    final db = await storage.database;
+    await db.transaction((txn) async {
+      await txn.update(
+        table,
+        {'amount_minor': owe.amountMinor - amountMinor},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      final part = owe.copyWith(
+        id: null,
+        amountMinor: amountMinor,
+        accountId: accountId,
+        occurredAt: when,
+        note: note,
+        dueAt: null,
+        oweStatus: OweStatus.completed,
+        completedAt: when,
+        parentId: id,
+      );
+      await txn.insert(table, toRow(part)..remove('id'));
+    });
+  }
+
+  /// Payments made so far against each owe: owe id → payments, oldest first.
+  Future<Map<int, List<MoneyTransaction>>> partsByOwe() async {
+    final db = await storage.database;
+    final rows = await db.query(
+      table,
+      where: 'parent_id IS NOT NULL',
+      orderBy: 'occurred_at ASC, id ASC',
+    );
+    final map = <int, List<MoneyTransaction>>{};
+    for (final t in rows.map(fromRow)) {
+      (map[t.parentId!] ??= []).add(t);
+    }
+    return map;
   }
 
   Future<List<MoneyTransaction>> pendingOwes({DateTime? through}) async {
@@ -351,6 +416,17 @@ class TransactionRepository extends CrudRepository<MoneyTransaction> {
       );
       await _unlinkPurchase(txn, id);
       await _linkGivenAsset(txn, id, null);
+      // Removing a part payment puts its amount back on the owe (reopening
+      // it if that payment had settled it).
+      final part = await txn.query(table, where: 'id = ?', whereArgs: [id]);
+      final parent = part.isEmpty ? null : part.first['parent_id'];
+      if (parent != null) {
+        await txn.rawUpdate(
+          'UPDATE transactions SET amount_minor = amount_minor + ?, '
+          "owe_status = 'pending', completed_at = NULL WHERE id = ?",
+          [part.first['amount_minor'], parent],
+        );
+      }
       final count = await txn.delete(table, where: 'id = ?', whereArgs: [id]);
       if (count == 0) throw StateError('$table row $id does not exist');
     });

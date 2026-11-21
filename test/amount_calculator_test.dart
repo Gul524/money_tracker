@@ -50,15 +50,18 @@ void main() {
       expect(_type('1000 - 600 / 2 + 5').resultMinor, 70500);
     });
 
-    test('starts from the field text and previews with a trailing operator', () {
-      final calc = _type('+', '1250.5');
-      expect(calc.expression, '1,250.5 +');
-      expect(calc.hasOperation, isFalse);
-      expect(calc.resultMinor, 125050);
-      calc.inputDigit('5');
-      expect(calc.hasOperation, isTrue);
-      expect(calc.resultMinor, 125550);
-    });
+    test(
+      'starts from the field text and previews with a trailing operator',
+      () {
+        final calc = _type('+', '1250.5');
+        expect(calc.expression, '1,250.5 +');
+        expect(calc.hasOperation, isFalse);
+        expect(calc.resultMinor, 125050);
+        calc.inputDigit('5');
+        expect(calc.hasOperation, isTrue);
+        expect(calc.resultMinor, 125550);
+      },
+    );
 
     test('input rules', () {
       expect(_type('+ 5').expression, '5'); // no leading operator

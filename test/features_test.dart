@@ -646,6 +646,38 @@ void main() {
       await s.accounts.delete(w.bank.id!);
     });
 
+    test('a loan can be paid back in parts', () async {
+      final w = await _World.create();
+      addTearDown(w.services.close);
+      final t = w.services.transactions;
+      final loan = await owe(w, TransactionType.oweIn, 100000, via: w.cash);
+      final cash = await w.services.accounts.balanceMinor(w.cash.id!);
+      final bank = await w.services.accounts.balanceMinor(w.bank.id!);
+
+      await t.payPart(loan.id!, 30000, w.bank.id!);
+      expect((await t.getById(loan.id!))!.amountMinor, 70000);
+      expect((await t.partsByOwe())[loan.id]!.single.amountMinor, 30000);
+      expect(await w.services.accounts.balanceMinor(w.bank.id!), bank + 30000);
+      expect(await w.services.accounts.balanceMinor(w.cash.id!), cash);
+      await expectLater(
+        t.payPart(loan.id!, 70001, w.bank.id!),
+        throwsArgumentError,
+      );
+
+      await t.payPart(loan.id!, 70000, w.bank.id!);
+      expect((await t.pendingOwes()), isEmpty);
+      expect(await w.services.accounts.balanceMinor(w.bank.id!), bank + 100000);
+
+      // Deleting a payment reopens what it paid.
+      final part = (await t.partsByOwe())[loan.id]!.single;
+      await t.delete(part.id!);
+      final reopened = (await t.getById(loan.id!))!;
+      expect(
+        (reopened.amountMinor, reopened.oweStatus),
+        (100000, OweStatus.pending),
+      );
+    });
+
     test('only owes carry an exchange, and money or item, not both', () async {
       final w = await _World.create();
       addTearDown(w.services.close);

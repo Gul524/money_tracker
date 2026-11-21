@@ -37,15 +37,14 @@ class _SplashScreenState extends State<SplashScreen>
     controller = SplashController(widget.services)..addListener(_maybeContinue);
     _intro =
         AnimationController(
-            vsync: this,
-            duration: const Duration(milliseconds: 1900),
-          )
-          ..addStatusListener((status) {
-            if (status == AnimationStatus.completed) {
-              _introDone = true;
-              _maybeContinue();
-            }
-          });
+          vsync: this,
+          duration: const Duration(milliseconds: 1900),
+        )..addStatusListener((status) {
+          if (status == AnimationStatus.completed) {
+            _introDone = true;
+            _maybeContinue();
+          }
+        });
     _ambient = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 9),
@@ -126,15 +125,11 @@ class _SplashScreenState extends State<SplashScreen>
           fit: StackFit.expand,
           children: [
             RepaintBoundary(
-              child: CustomPaint(
-                painter: _BackdropPainter(_ambient, palette),
-              ),
+              child: CustomPaint(painter: _BackdropPainter(_ambient, palette)),
             ),
             SafeArea(
               child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: SpaceSize.huge,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: SpaceSize.huge),
                 child: Column(
                   children: [
                     const Spacer(flex: 5),
@@ -148,10 +143,7 @@ class _SplashScreenState extends State<SplashScreen>
                       ambient: _ambient,
                     ),
                     const SizedBox(height: SpaceSize.section),
-                    _AnimatedName(
-                      text: SplashScreen.appName,
-                      intro: _intro,
-                    ),
+                    _AnimatedName(text: SplashScreen.appName, intro: _intro),
                     const SizedBox(height: SpaceSize.small),
                     _Reveal(
                       animation: _phase(.66, .94),
@@ -232,9 +224,8 @@ class _BackdropPainter extends CustomPainter {
         center,
         radius,
         Paint()
-          ..shader = RadialGradient(
-            colors: [color, color.withValues(alpha: 0)],
-          ).createShader(Rect.fromCircle(center: center, radius: radius)),
+          ..shader = RadialGradient(colors: [color, color.withValues(alpha: 0)])
+              .createShader(Rect.fromCircle(center: center, radius: radius)),
       );
     }
 

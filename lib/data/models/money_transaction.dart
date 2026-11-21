@@ -19,6 +19,7 @@ class MoneyTransaction {
     this.oweStatus,
     this.completedAt,
     this.exchangeAccountId,
+    this.parentId,
   });
 
   final int? id;
@@ -38,6 +39,10 @@ class MoneyTransaction {
   /// recorded or when an item was exchanged instead (see assets).
   final int? exchangeAccountId;
 
+  /// Part payments: the owe this completed entry is a payment of (the owe
+  /// itself keeps only what is still unpaid).
+  final int? parentId;
+
   factory MoneyTransaction.fromJson(Map<String, dynamic> json) =>
       _$MoneyTransactionFromJson(json);
   Map<String, dynamic> toJson() => _$MoneyTransactionToJson(this);
@@ -55,6 +60,7 @@ class MoneyTransaction {
     Object? oweStatus = omitted,
     Object? completedAt = omitted,
     Object? exchangeAccountId = omitted,
+    Object? parentId = omitted,
   }) => MoneyTransaction(
     id: identical(id, omitted) ? this.id : id as int?,
     type: type ?? this.type,
@@ -76,5 +82,6 @@ class MoneyTransaction {
     exchangeAccountId: identical(exchangeAccountId, omitted)
         ? this.exchangeAccountId
         : exchangeAccountId as int?,
+    parentId: identical(parentId, omitted) ? this.parentId : parentId as int?,
   );
 }

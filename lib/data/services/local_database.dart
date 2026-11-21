@@ -17,7 +17,7 @@ class LocalDatabase {
     _database = await _factory.openDatabase(
       databasePath,
       options: OpenDatabaseOptions(
-        version: 7,
+        version: 8,
         onConfigure: (db) async => db.execute('PRAGMA foreign_keys = ON'),
         onCreate: _createSchema,
         onUpgrade: _upgradeSchema,
@@ -71,6 +71,7 @@ class LocalDatabase {
         completed_at TEXT,
         exchange_account_id INTEGER REFERENCES accounts(id) ON DELETE RESTRICT
           CHECK($_exchangeCheck),
+        parent_id INTEGER REFERENCES transactions(id) ON DELETE CASCADE,
         CHECK((type IN ('income', 'expense') AND account_id IS NOT NULL
           AND owe_status IS NULL AND due_at IS NULL AND completed_at IS NULL)
           OR (type IN ('oweIn', 'oweOut') AND owe_status IS NOT NULL
@@ -78,6 +79,9 @@ class LocalDatabase {
             OR owe_status = 'completed' AND completed_at IS NOT NULL AND account_id IS NOT NULL)))
       )
     ''');
+    await db.execute(
+      'CREATE INDEX transactions_parent_idx ON transactions(parent_id)',
+    );
     await db.execute(
       'CREATE INDEX transactions_date_idx ON transactions(occurred_at)',
     );
@@ -184,6 +188,22 @@ class LocalDatabase {
         await _addTaxSnapshotColumns(db);
       }
     }
+    if (oldVersion < 8) await _addPartPaymentLink(db);
+  }
+
+  Future<void> _addPartPaymentLink(Database db) async {
+    final tx = await _columnNames(db, 'transactions');
+    if (tx.isEmpty) return;
+    if (!tx.contains('parent_id')) {
+      await db.execute(
+        'ALTER TABLE transactions ADD COLUMN parent_id INTEGER '
+        'REFERENCES transactions(id) ON DELETE CASCADE',
+      );
+    }
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS transactions_parent_idx '
+      'ON transactions(parent_id)',
+    );
   }
 
   Future<void> _createTaxRates(Database db) async {

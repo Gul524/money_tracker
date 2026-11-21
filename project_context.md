@@ -52,7 +52,7 @@ Screen (StatefulWidget)  ──owns──▶  Controller (BaseController : Chang
                          ┌────────────────┼──────────────────────┐
                     Repositories (CrudRepository<T>)      Services (Dashboard, Activity, Report, Settings)
                          └────────────────┬──────────────────────┘
-                                   LocalDatabase (single sqflite connection, schema v6)
+                                   LocalDatabase (single sqflite connection, schema v8)
 ```
 
 **Refresh mechanism (important):**
@@ -195,7 +195,7 @@ All immutable, `const` constructors, `id` is `int?` (null = not yet saved), `cop
 
 ### 4.3 SQLite schema (`lib/data/services/local_database.dart`)
 - DB file: `<getDatabasesPath()>/money_tracker.db` (or `path` ctor arg; tests use `inMemoryDatabasePath`). `LocalDatabase({DatabaseFactory? factory, String? path})`.
-- **Version 7.** `onConfigure`: `PRAGMA foreign_keys = ON`. Connection opened lazily via `await storage.database` and cached.
+- **Version 8** (v8 = `transactions.parent_id` → transactions ON DELETE CASCADE, part payments). `onConfigure`: `PRAGMA foreign_keys = ON`. Connection opened lazily via `await storage.database` and cached.
 - All FKs are `ON DELETE RESTRICT` (deleting a referenced row fails → "This item is in use…").
 
 | Table | Columns / constraints |
@@ -261,6 +261,8 @@ Note: repos and services each construct their own repository instances over the 
 ---
 
 ## 5. Business rules
+
+- **Part payments (v8):** `TransactionRepository.payPart(id, amount, accountId)` lowers the pending owe's amount to what is left and inserts a *completed* copy (same type/party/category/exchange wallet, `parent_id` = owe, note "Part payment", occurred/completed = payment date), so balances, reports and export need no special case. Paying the whole remainder = `completeOwe`. `partsByOwe()` groups payments; original amount = remaining + Σ parts (`OweController.totalMinor/paidMinor`). Deleting a payment adds its amount back to the owe (reopening it if settled); deleting the owe cascades its payments. UI: Money owed › tap an entry → amount field (default = all left), progress bar on the tile. Shortcuts: report "lent/borrowed" counts a payment's exchange amount in the payment's month; editing the owe's amount after payments re-syncs a linked asset price to the remainder.
 
 ### 5.1 Account balance (`AccountRepository.balanceMinor`)
 ```

@@ -1,6 +1,7 @@
 import '../../data/models/account.dart';
 import '../../data/models/model_types.dart';
 import '../../data/models/money_transaction.dart';
+import 'money_amount.dart';
 import 'base_controller.dart';
 
 class OweController extends BaseController {
@@ -13,6 +14,15 @@ class OweController extends BaseController {
   /// What each owe exchanged, e.g. `Lent from Cash` or `Gave Gold ring`.
   Map<int, String> links = {};
 
+  /// Part payments made so far, per owe id, oldest first.
+  Map<int, List<MoneyTransaction>> parts = {};
+
+  int paidMinor(MoneyTransaction t) =>
+      (parts[t.id] ?? const []).fold(0, (s, p) => s + p.amountMinor);
+
+  /// The owe's original amount: what is still owed plus what was paid.
+  int totalMinor(MoneyTransaction t) => t.amountMinor + paidMinor(t);
+
   List<MoneyTransaction> get owedToMe =>
       items.where((t) => t.type == TransactionType.oweIn).toList();
   List<MoneyTransaction> get iOwe =>
@@ -24,6 +34,7 @@ class OweController extends BaseController {
   void refresh() {
     run(() async {
       items = await services.transactions.pendingOwes();
+      parts = await services.transactions.partsByOwe();
       accounts = await services.accounts.getAll();
       final names = {for (final a in accounts) a.id!: a.name};
       final bought = <int, String>{};
@@ -48,6 +59,21 @@ class OweController extends BaseController {
       };
     });
   }
+
+  /// Records a payment of [amountText] against owe [id]; paying everything
+  /// that is left settles it.
+  Future<bool> pay(int id, int accountId, String amountText) async =>
+      await run(() async {
+        await services.transactions.payPart(
+          id,
+          MoneyAmount.parse(amountText),
+          accountId,
+          note: 'Part payment',
+        );
+        services.changed();
+        return true;
+      }) ==
+      true;
 
   Future<bool> complete(int id, int accountId) async =>
       await run(() async {

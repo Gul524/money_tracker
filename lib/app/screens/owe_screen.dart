@@ -5,6 +5,7 @@ import '../../data/models/money_transaction.dart';
 import '../app_services.dart';
 import '../app_sizes.dart';
 import '../app_theme.dart';
+import '../controllers/money_amount.dart';
 import '../controllers/owe_controller.dart';
 import '../widgets/app_widgets.dart';
 import 'add_entry_sheet.dart';
@@ -44,6 +45,8 @@ class _OweScreenState extends State<OweScreen> {
     final accounts = controller.accounts.where((a) => !a.isArchived).toList();
     int? accountId =
         t.accountId ?? (accounts.length == 1 ? accounts.first.id : null);
+    final amount = TextEditingController(text: amountInputText(t.amountMinor));
+    final paid = controller.parts[t.id] ?? const <MoneyTransaction>[];
 
     await showAppSheet<void>(
       context,
@@ -51,21 +54,27 @@ class _OweScreenState extends State<OweScreen> {
         builder: (context, setSheetState) => AnimatedBuilder(
           animation: controller,
           builder: (context, _) => SheetScaffold(
-            title: incoming ? 'Mark as received' : 'Mark as paid',
-            subtitle: incoming
-                ? '${money(t.amountMinor, currency)} from ${_who(t)} will be added to the account you choose.'
-                : '${money(t.amountMinor, currency)} to ${_who(t)} will be taken from the account you choose.',
+            title: incoming ? 'Record a receipt' : 'Record a payment',
+            subtitle: paid.isEmpty
+                ? '${money(t.amountMinor, currency)} ${incoming ? 'from' : 'to'} ${_who(t)} is still ${incoming ? 'owed to you' : 'owed'}. Enter less to pay in parts.'
+                : '${money(t.amountMinor, currency)} left of ${money(controller.totalMinor(t), currency)} ${incoming ? 'from' : 'to'} ${_who(t)}.',
             error: controller.error,
             busy: controller.busy,
-            primaryLabel: incoming ? 'Mark as received' : 'Mark as paid',
+            primaryLabel: isAll(amount.text, t)
+                ? (incoming ? 'Mark as received' : 'Mark as paid')
+                : (incoming ? 'Record receipt' : 'Record payment'),
             onPrimary: accountId == null
                 ? null
                 : () async {
-                    if (await controller.complete(t.id!, accountId!) &&
+                    final all = isAll(amount.text, t);
+                    if (await controller.pay(t.id!, accountId!, amount.text) &&
                         sheetContext.mounted) {
                       Navigator.pop(sheetContext);
                       if (mounted) {
-                        showMessage(this.context, 'Marked as settled');
+                        showMessage(
+                          this.context,
+                          all ? 'Marked as settled' : 'Payment recorded',
+                        );
                       }
                     }
                   },
@@ -80,6 +89,12 @@ class _OweScreenState extends State<OweScreen> {
               );
             },
             children: [
+              AmountField(
+                controller: amount,
+                currency: currency,
+                onChanged: (_) => setSheetState(() {}),
+              ),
+              const SizedBox(height: SpaceSize.medium),
               Text(
                 incoming ? 'Received in' : 'Paid from',
                 style: Theme.of(context).textTheme.bodySmall,
@@ -110,19 +125,48 @@ class _OweScreenState extends State<OweScreen> {
                 ],
               ),
               const SizedBox(height: SpaceSize.medium),
+              if (paid.isNotEmpty) ...[
+                Text(
+                  incoming ? 'Received so far' : 'Paid so far',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: SpaceSize.small),
+                GroupedCard(
+                  children: [
+                    for (final p in paid)
+                      AppTile(
+                        title: formatDate(p.occurredAt),
+                        showChevron: false,
+                        trailing: AmountText(
+                          p.amountMinor,
+                          currency: currency,
+                          tone: AmountTone.muted,
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: SpaceSize.medium),
+              ],
             ],
           ),
         ),
       ),
     );
+    amount.dispose();
   }
+
+  /// True when the typed amount covers everything still owed.
+  bool isAll(String text, MoneyTransaction t) =>
+      MoneyAmount.tryParse(text) == t.amountMinor;
 
   Widget _tile(MoneyTransaction t) {
     final colors = AppColors.of(context);
     final today = dateOnly(DateTime.now());
     final due = t.dueAt;
     final overdue = due != null && dateOnly(due).isBefore(today);
-    return AppTile(
+    final paid = controller.paidMinor(t);
+    final total = controller.totalMinor(t);
+    final tile = AppTile(
       leading: IconBadge(
         t.type == TransactionType.oweIn
             ? Icons.call_received_rounded
@@ -137,6 +181,8 @@ class _OweScreenState extends State<OweScreen> {
             : overdue
             ? 'Overdue since ${formatDate(due).replaceFirst(' ${today.year}', '')}'
             : 'Due ${relativeDay(due) == 'Today' ? 'today' : formatDate(due)}',
+        if (paid > 0)
+          'Paid ${money(paid, widget.services.currencyCode)} of ${money(total, widget.services.currencyCode)}',
         ?controller.links[t.id],
       ].join(' · '),
       subtitleColor: overdue ? colors.expense : null,
@@ -145,6 +191,24 @@ class _OweScreenState extends State<OweScreen> {
         currency: widget.services.currencyCode,
       ),
       onTap: () => _settle(t),
+    );
+    if (paid == 0) return tile;
+    return Column(
+      children: [
+        tile,
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            SpaceSize.gutter,
+            0,
+            SpaceSize.gutter,
+            SpaceSize.small,
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(RadiusSize.small),
+            child: LinearProgressIndicator(value: paid / total, minHeight: 6),
+          ),
+        ),
+      ],
     );
   }
 
@@ -210,7 +274,7 @@ class _OweScreenState extends State<OweScreen> {
                     'you never forget who owes what.',
               )
             else ...[
-              const InfoNote('Tap an entry when it’s been paid back.'),
+              const InfoNote('Tap an entry to record a full or part payment.'),
               _section('Owed to you', controller.owedToMe),
               _section('You owe', controller.iOwe),
             ],
