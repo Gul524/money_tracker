@@ -575,6 +575,7 @@ class ActivityTile extends StatelessWidget {
     this.onTap,
     this.showDate = true,
     this.accountId,
+    this.onSettle,
   });
   final ActivityItem item;
   final String currency;
@@ -584,6 +585,9 @@ class ActivityTile extends StatelessWidget {
   /// When shown inside one account, transfers display as +/− for it and the
   /// account name is left out.
   final int? accountId;
+
+  /// One-click "Pay" / "Receive" for a pending owe.
+  final VoidCallback? onSettle;
 
   @override
   Widget build(BuildContext context) {
@@ -681,7 +685,21 @@ class ActivityTile extends StatelessWidget {
             tone: tone,
             signed: !isTransfer || accountId != null,
           ),
-          if (item.isPending)
+          if (item.isPending && onSettle != null)
+            Padding(
+              padding: const EdgeInsets.only(top: SpaceSize.small),
+              child: FilledButton.tonal(
+                onPressed: onSettle,
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(72, 36),
+                  visualDensity: VisualDensity.compact,
+                ),
+                child: Text(
+                  t?.type == TransactionType.oweIn ? 'Receive' : 'Pay',
+                ),
+              ),
+            )
+          else if (item.isPending)
             Padding(
               padding: const EdgeInsets.only(top: SpaceSize.tiny),
               child: StatusPill('Pending', color: colors.warning),

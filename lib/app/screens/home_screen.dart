@@ -141,6 +141,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               ActivityTile(
                                 item: item,
                                 currency: currency,
+                                onSettle: settleAction(context, services, item),
                                 onTap: () =>
                                     openActivity(context, services, item),
                               ),

@@ -192,9 +192,16 @@ class TransactionController extends BaseController {
   Asset? get givenAsset =>
       assets.where((a) => a.id == givenAssetId).firstOrNull;
 
+  /// Part payments already made against the owe being edited.
+  List<MoneyTransaction> parts = [];
+
   @override
   void refresh() {
     run(() async {
+      final owe = editing?.id;
+      parts = owe == null
+          ? []
+          : (await services.transactions.partsByOwe())[owe] ?? [];
       categories = await services.categories.getAll();
       // Archived accounts are hidden, except one already used by this entry.
       accounts = (await services.accounts.getAll())

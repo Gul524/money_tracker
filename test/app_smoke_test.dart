@@ -14,6 +14,7 @@ import 'package:money_tracker/data/models/account.dart';
 import 'package:money_tracker/data/models/account_transfer.dart';
 import 'package:money_tracker/data/models/category.dart';
 import 'package:money_tracker/data/models/model_types.dart';
+import 'package:money_tracker/data/models/money_transaction.dart';
 import 'package:money_tracker/app/widgets/app_widgets.dart';
 import 'package:money_tracker/app/screens/tax_screen.dart';
 import 'package:money_tracker/data/models/tax_rate.dart';
@@ -605,5 +606,50 @@ void main() {
       await tester.runAsync(() => services.accounts.balanceMinor(1)),
       -100000,
     );
+  });
+
+  testWidgets('a pending owe is received in parts from the dashboard', (
+    tester,
+  ) async {
+    _phoneSize(tester);
+    final services = _services();
+    addTearDown(services.close);
+    await tester.runAsync(services.initialize);
+    final income = (await tester.runAsync(services.categories.getAll))!
+        .firstWhere((c) => c.name == 'Salary');
+    await tester.runAsync(
+      () => services.transactions.create(
+        MoneyTransaction(
+          type: TransactionType.oweIn,
+          amountMinor: 100000,
+          categoryId: income.id!,
+          occurredAt: DateTime.now(),
+          party: 'Ali',
+          oweStatus: OweStatus.pending,
+        ),
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: AppShell(services: services),
+      ),
+    );
+    await _settle(tester);
+
+    await tester.scrollUntilVisible(find.text('Receive'), 200);
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -300));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Receive'));
+    await _settle(tester);
+    await tester.enterText(find.byType(TextField).first, '400');
+    await tester.pump();
+    await tester.tap(find.text('Record receipt'));
+    await _settle(tester);
+
+    expect(find.text('Payment recorded'), findsOneWidget);
+    final owe = (await tester.runAsync(services.transactions.pendingOwes))!;
+    expect(owe.single.amountMinor, 60000);
+    await tester.runAsync(services.close);
   });
 }

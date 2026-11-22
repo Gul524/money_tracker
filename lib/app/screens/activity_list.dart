@@ -4,6 +4,7 @@ import '../../data/services/activity_service.dart';
 import '../app_services.dart';
 import '../app_sizes.dart';
 import '../widgets/app_widgets.dart';
+import 'owe_settle_sheet.dart';
 import 'transaction_screen.dart';
 import 'transfer_screen.dart';
 
@@ -32,6 +33,15 @@ Future<void> openActivity(
       .push<bool>(MaterialPageRoute(builder: (_) => page));
   if (saved == true && context.mounted) showMessage(context, 'Saved');
 }
+
+/// The one-click pay/receive action for a pending owe row (null otherwise).
+VoidCallback? settleAction(
+  BuildContext context,
+  AppServices services,
+  ActivityItem item,
+) => item.isPending && item.transaction != null
+    ? () => showOweSettleSheet(context, services, item.transaction!)
+    : null;
 
 /// Activity grouped by day (Today, Yesterday, …) with each day's net.
 class ActivityDayGroups extends StatelessWidget {
@@ -80,6 +90,7 @@ class ActivityDayGroups extends StatelessWidget {
                   currency: currency,
                   showDate: false,
                   accountId: accountId,
+                  onSettle: settleAction(context, services, item),
                   onTap: () => openActivity(context, services, item),
                 ),
             ],

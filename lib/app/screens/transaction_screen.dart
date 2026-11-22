@@ -6,6 +6,7 @@ import '../../data/models/tax_payment.dart';
 import '../app_services.dart';
 import '../app_sizes.dart';
 import '../app_theme.dart';
+import 'owe_settle_sheet.dart';
 import '../controllers/transaction_controller.dart';
 import '../widgets/app_widgets.dart';
 import '../../data/models/tax_rate.dart';
@@ -445,6 +446,42 @@ class _TransactionScreenState extends State<TransactionScreen> {
     ];
   }
 
+  /// Pay/receive button and the part payments of the owe being edited.
+  List<Widget> _payments(String currency) {
+    final owe = widget.existing;
+    if (owe == null || owe.parentId != null) return const [];
+    final incoming = owe.type == TransactionType.oweIn;
+    final pending = owe.oweStatus == OweStatus.pending;
+    final paid = controller.parts.fold<int>(0, (s, p) => s + p.amountMinor);
+    return [
+      if (pending)
+        Padding(
+          padding: const EdgeInsets.only(top: SpaceSize.section),
+          child: FilledButton.tonalIcon(
+            icon: Icon(
+              incoming ? Icons.call_received_rounded : Icons.call_made_rounded,
+            ),
+            label: Text(incoming ? 'Receive money' : 'Pay money'),
+            onPressed: () async {
+              if (await showOweSettleSheet(context, widget.services, owe) &&
+                  mounted) {
+                // The form still holds the old amount; saving it would undo the payment.
+                Navigator.of(context).pop(false);
+              }
+            },
+          ),
+        ),
+      if (controller.parts.isNotEmpty) ...[
+        SectionHeader(
+          incoming
+              ? 'Received so far · ${money(paid, currency)}'
+              : 'Paid so far · ${money(paid, currency)}',
+        ),
+        OwePaymentsCard(payments: controller.parts, currency: currency),
+      ],
+    ];
+  }
+
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: controller,
@@ -599,6 +636,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                 ),
               ],
             ),
+            if (controller.isOwe) ..._payments(currency),
             if (controller.isOwe) InfoNote(_oweNote(currency)),
             if (controller.canHaveTax && controller.taxMinor > 0)
               InfoNote(_taxSummary(currency)),
