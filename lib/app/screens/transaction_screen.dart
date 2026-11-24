@@ -573,7 +573,16 @@ class _TransactionScreenState extends State<TransactionScreen> {
                       ? 'Today'
                       : formatDate(controller.occurredAt),
                   onTap: () async {
-                    final d = await pickDate(context, controller.occurredAt);
+                    final d = await pickDay(context, controller.occurredAt);
+                    if (d != null) controller.setDate(d);
+                  },
+                ),
+                FormRow(
+                  icon: Icons.schedule_rounded,
+                  label: 'Time',
+                  value: formatTime(controller.occurredAt),
+                  onTap: () async {
+                    final d = await pickTime(context, controller.occurredAt);
                     if (d != null) controller.setDate(d);
                   },
                 ),

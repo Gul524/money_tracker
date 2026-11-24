@@ -78,6 +78,12 @@ DateTime dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 String formatDate(DateTime d) =>
     '${d.day} ${_short(monthNames[d.month - 1])} ${d.year}';
 
+/// `3:05 PM` (12-hour clock)
+String formatTime(DateTime d) {
+  final h = d.hour % 12 == 0 ? 12 : d.hour % 12;
+  return '$h:${d.minute.toString().padLeft(2, '0')} ${d.hour < 12 ? 'AM' : 'PM'}';
+}
+
 /// `November 2026`
 String formatMonthYear(DateTime d) => '${monthNames[d.month - 1]} ${d.year}';
 

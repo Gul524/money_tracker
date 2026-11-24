@@ -69,7 +69,7 @@ Screen (StatefulWidget)  ──owns──▶  Controller (BaseController : Chang
 
 **Money:** all amounts are `int` **minor units** (×100). Parsing: `MoneyAmount.parse`. Formatting: `money(minor, currency, {signed})` in `lib/app/formatters.dart` → `Rs 12,345.50`, `$1,200.00`, `−Rs 5.00`, signed `+£25.00`. Symbols: PKR→`Rs`, USD→`$`, EUR→`€`, GBP→`£` (multi-letter symbols get a space). `amountInputText(minor)` → editable text (`1200`, `1250.5`).
 
-**Dates:** stored as `DateTime.toIso8601String()` (local time, no TZ) TEXT columns; range queries compare ISO strings lexicographically. UI formats via `formatters.dart`: `formatDate` (`15 Nov 2026`), `formatMonthYear` (`November 2026`), `formatLongDate` (`Sunday, 15 November`), `relativeDay` (`Today`/`Yesterday`/`Tomorrow`/`Tue, 10 Nov`/`2 Mar 2025`), `dateOnly`.
+**Dates:** stored as `DateTime.toIso8601String()` (local time, no TZ) TEXT columns; range queries compare ISO strings lexicographically. Entries keep the time too: new ones default to now, and the form has **Date** (`pickDay`) and **Time** (`pickTime`) rows that each keep the other part; lists show the time as `3:05 PM` (`formatTime`, 12-hour AM/PM). UI formats via `formatters.dart`: `formatDate` (`15 Nov 2026`), `formatMonthYear` (`November 2026`), `formatLongDate` (`Sunday, 15 November`), `relativeDay` (`Today`/`Yesterday`/`Tomorrow`/`Tue, 10 Nov`/`2 Mar 2025`), `dateOnly`.
 
 ---
 

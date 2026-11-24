@@ -660,6 +660,7 @@ class ActivityTile extends StatelessWidget {
       else if (item.kind == ActivityKind.tax && item.taxLabel != null)
         item.taxLabel!,
       if (showDate) relativeDay(item.date),
+      formatTime(item.date),
     ].join(' · ');
 
     return AppTile(
@@ -1164,3 +1165,22 @@ Future<DateTime?> pickDate(BuildContext context, DateTime? initial) =>
       lastDate: DateTime(2100),
       initialDate: initial ?? DateTime.now(),
     );
+
+/// Picks a new day for [initial], keeping its time of day.
+Future<DateTime?> pickDay(BuildContext context, DateTime initial) async {
+  final d = await pickDate(context, initial);
+  return d == null
+      ? null
+      : DateTime(d.year, d.month, d.day, initial.hour, initial.minute);
+}
+
+/// Picks a new time of day for [initial], keeping its day.
+Future<DateTime?> pickTime(BuildContext context, DateTime initial) async {
+  final t = await showTimePicker(
+    context: context,
+    initialTime: TimeOfDay.fromDateTime(initial),
+  );
+  return t == null
+      ? null
+      : DateTime(initial.year, initial.month, initial.day, t.hour, t.minute);
+}

@@ -264,7 +264,7 @@ void main() {
     await tester.tap(find.text('Show 1 results'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Cash → Bank'));
+    await tester.tap(find.textContaining('Cash → Bank'));
     await _settle(tester);
     expect(find.text('Edit transfer'), findsOneWidget);
     expect(find.byTooltip('Delete'), findsOneWidget);
@@ -443,6 +443,8 @@ void main() {
     await tester.tap(find.text('Lent from'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Cash').last);
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(Scrollable).last, const Offset(0, -300));
     await tester.pumpAndSettle();
     expect(find.textContaining('Rs 500.00 leaves Cash now'), findsOneWidget);
     await tester.tap(find.text('Save'));
